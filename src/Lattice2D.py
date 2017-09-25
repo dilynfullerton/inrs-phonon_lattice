@@ -1,4 +1,24 @@
-from itertools import product
+from itertools import product, count, chain
+from numpy import exp, dot, array, sqrt
+from scipy.linalg import sqrtm, eigh, inv
+import numpy as np
+
+
+def _bloch_equiv(q1, q2):
+    for q1x, q1y in zip(q1, q2):
+        diff = q1x - q1y
+        if diff != int(diff):
+            return False
+    else:
+        return True
+
+
+def _all_connections(connections):
+    sorted_connections = set()
+    for k1, k2 in connections:
+        sorted_connections.add((k2, k1))
+        sorted_connections.add((k1, k2))
+    return sorted_connections
 
 
 class UnitCell2D:
@@ -60,13 +80,31 @@ class UnitCell2D:
         p2 are particle labels. Here p1 refers to the particle in
         this cell and p2 refers to the particle in the adjacent cell above.
         """
-        self.a1 = a1
-        self.a2 = a2
+        self.a1 = array(a1)
+        self.a2 = array(a2)
+        self._a_mat = np.hstack(self.a1, self.a2)
         self.particle_positions = particle_positions
         self.particle_masses = particle_masses
-        self.internal_connections = internal_connections
+        self.internal_connections = _all_connections(internal_connections)
         self.external_connections_x = external_connections_x
         self.external_connections_y = external_connections_y
+        self.num_particles = len(self.particle_positions)
+
+    def connected_int(self, k1, k2):
+        return (k1, k2) in self.internal_connections
+
+    def connected_x(self, k1, k2):
+        return (k1, k2) in self.external_connections_x
+
+    def connected_y(self, k1, k2):
+        return (k1, k2) in self.external_connections_y
+
+    def mass(self, k):
+        return self.particle_masses[k]
+
+    def position(self, k, p=(0, 0)):
+        x, y = self.particle_positions[k]
+        return (x + p[0]) * self.a1 + (y + p[1]) * self.a2
 
 
 # Examples
@@ -88,7 +126,214 @@ SQUARE_2D = UnitCell2D(
 )
 
 
+class BlochVector:
+    def __init__(self, q):
+        self.q = array(q)
+
+    def __eq__(self, other):
+        if not isinstance(other, BlochVector):
+            return False
+        else:
+            return self.canonical_form() == other.canonical_form()
+
+    def __hash__(self):
+        return hash(self.canonical_form())
+
+    def __neg__(self):
+        return BlochVector(-self.q)
+
+    def __add__(self, other):
+        return BlochVector(self.q + other.q)
+
+    def __sub__(self, other):
+        return BlochVector(self.q - other.q)
+
+    def __mul__(self, other):
+        return BlochVector(other * self.q)
+
+    def __getitem__(self, item):
+        return self.q[item]
+
+    def canonical_form(self):
+        return array([qi - int(qi) for qi in self.q])
+
+
 class Lattice2D:
-    def __init__(self, unit_cell, N_x, N_y, c_matrix):
+    def __init__(self, unit_cell, N_x, N_y, c_matrix, x_ops, p_ops):
+        self.unit_cell = unit_cell
         self.Nx = N_x
         self.Ny = N_y
+        # self.b1, self.b2 = self._set_b_vectors()
+        self.c_matrix = c_matrix
+        self._x_ops = x_ops
+        self._p_ops = p_ops
+        self._evals_dict = dict()
+        self._evect_dict = dict()
+        self._indices = list(
+            product(range(self.unit_cell.num_particles), range(2))
+        )
+
+    def are_connected(self, k1, p1, k2, p2):
+        """Returns true if there is a connection between particle number k1
+        in unit cell p1 and particle number k2 in unit cell p2
+        :param k1: Index of particle 1 in unit cell
+        :param p1: Position index (nx, ny) of unit cell 1
+        :param k2: Index of particle 2 in unit cell
+        :param p2: Position index (nx, ny) of unit cell 2
+        """
+        nx1, ny1 = p1
+        nx2, ny2 = p2
+        if abs(nx1-nx2) + abs(ny1-ny2) > 1:
+            return False
+        elif nx1 - nx2 == 1:
+            return self.unit_cell.connected_x(k2, k1)
+        elif nx2 - nx1 == 1:
+            return self.unit_cell.connected_x(k1, k2)
+        elif ny1 - ny2 == 1:
+            return self.unit_cell.connected_y(k2, k1)
+        elif ny2 - ny1 == 1:
+            return self.unit_cell.connected_y(k1, k2)
+        else:
+            return self.unit_cell.connected_int(k1, k2)
+
+    def position(self, k, p):
+        return self.unit_cell.position(k, p)
+
+    def unit_cells(self):
+        return product(range(self.Nx), range(self.Ny))
+
+    def d_matrix(self, k1, x1, k2, x2):
+        def _d(q):
+            d = 0
+            for nx, ny in self.unit_cells():
+                dp = self.c_matrix(self, k1, x1, (0, 0), k2, x2, (nx, ny))
+                q = array(q)
+                dp *= exp(1j * 2*np.pi * (q[0] * nx + q[1] * ny))
+                d += dp
+            return d * 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
+        return _d
+
+    def e(self, k, x, v):
+        i = self._indices.index((k, x))
+
+        def _e(q):
+            if q not in self._evals_dict:
+                self._set_d_eigenvectors(q)
+            return self._evect_dict[q][:, v][i]
+        return _e
+
+    def omega2(self, q, v):
+        if q not in self._evals_dict:
+            self._set_d_eigenvectors(q)
+        return self._evals_dict[q][v]
+
+    def q_vectors(self):
+        for m1, m2 in product(range(self.Nx), range(self.Ny)):
+            yield BlochVector([m1/self.Nx, m2/self.Ny])
+
+    def _A(self):
+        for q in self.q_vectors():
+            if q == -q:
+                yield q.canonical_form()
+
+    def _B(self):
+        b = []
+        for q in self.q_vectors():
+            if q != -q and -q not in b:
+                b.append(q)
+                yield q.canonical_form()
+
+    def operator_q_vectors(self):
+        return chain(self._A(), self._B())
+
+    def annihilation_operator(self, q, v):
+        if q in self._A():
+            x, px = self._x(q, v)
+            return 1/sqrt(2) * (x + 1j*px)
+        elif q in self._B():
+            x, px = self._x(q, v)
+            y, py = self._y(q, v)
+            return 1/2 * (x + 1j*px) + 1j/2 * (y + 1j*py)
+
+    def _z(self, q, v):
+        real_z = 0+0j
+        imag_z = 0+0j
+        real_pz = 0+0j
+        imag_pz = 0+0j
+        for k, x, p in product(range(self.unit_cell.num_particles), range(2),
+                               product(range(self.Nx), range(self.Ny))):
+            zi = exp(-1j * 2*np.pi * (q[0]*p[0] + q[1]*p[1]))
+            zi *= sqrt(self.unit_cell.mass(k)/self.unit_cell.mass(0))
+            zi *= np.conj(self.e(k, x, v)(q)) / sqrt(self.Nx * self.Ny)
+            xop = self._x_ops(k, x, p)
+            pop = self._p_ops(k, x, p)
+            real_z += zi.real * xop
+            imag_z += zi.imag * xop
+            real_pz += zi.real * pop
+            imag_pz += zi.imega * pop
+        return real_z, imag_z, real_pz, imag_pz
+
+    def _l(self, q, v):
+        m0 = self.unit_cell.mass(0)
+        omega = sqrt(self.omega2(q, v))
+        return 1 / sqrt(2 * m0 * omega)
+
+    def _x(self, q, v):
+        real_z, imag_z, real_pz, imag_pz = self._z(q, v)
+        l = self._l(q, v)
+        if q in self._A():
+            return real_z/2/l, real_pz/2/l
+        elif q in self._B():
+            return real_z/l, real_pz/l
+
+    def _y(self, q, v):
+        real_z, imag_z, real_pz, imag_pz = self._z(q, v)
+        l = self._l(q, v)
+        if q in self._B():
+            return imag_z / l, imag_pz / l
+
+    # def _set_b_vectors(self):
+    #     a1, a2 = self.unit_cell.a1, self.unit_cell.a2
+    #     amat = np.vstack((a1, a2))
+    #     bmat = inv(amat) * 2*np.pi
+    #     return bmat[:, 0], bmat[:, 1]
+
+    def _get_matrix_rep_d(self, q):
+        nparts = self.unit_cell.num_particles
+        dim = nparts * 2
+        d_mat = np.empty(shape=(dim, dim))
+        for k1x1, i in zip(product(range(nparts), range(2)), count()):
+            k1, x1 = k1x1
+            for k2x2, j in zip(product(range(k1, nparts), range(x1, 2)),
+                               count()):
+                k2, x2 = k2x2
+                d_mat[i, j] = self.d_matrix(k1, x1, k2, x2)(q)
+                if i != j:
+                    d_mat[j, i] = np.conj(d_mat[i][j])
+        return d_mat
+
+    def _orthonormal_eigenvectors(self, dmat):
+        evals, evects = eigh(a=dmat)
+        on_evects = dot(evects, inv(sqrtm(dot(evects.H, evects))))
+        for eval, evect in zip(evals, on_evects):
+            assert dmat * evect == eval * evect
+        return evals, on_evects
+
+    def _set_d_eigenvectors(self, q):
+        evals, evects = self._orthonormal_eigenvectors(
+            dmat=self._get_matrix_rep_d(q))
+        self._evals_dict[q] = evals
+        self._evect_dict[q] = evects
+
+
+def cmat_coulomb2d(lattice2d, k1, x1, p1, k2, x2, p2):
+    if not lattice2d.are_connected(k1, p1, k2, p2):
+        return 0
+    else:
+        disp = lattice2d.position(k1, p1) - lattice2d.position(k2, p2)
+        disp_abs = abs(disp)
+        offdiag = 3 * disp[x1] * disp[x2] / disp_abs**5
+        if x1 != x2:
+            return offdiag
+        else:
+            return offdiag - 1 / disp_abs**3
