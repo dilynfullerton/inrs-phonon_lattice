@@ -1,44 +1,28 @@
-from itertools import product, count, chain
-from numpy import exp, dot, array, sqrt
-from scipy.linalg import sqrtm, eigh, inv
+from numpy import array
+from itertools import product
+from Lattice2D import all_connections, BlochVector
 import numpy as np
-from qutip import *
+from numpy.linalg import norm
 
 
-def _bloch_equiv(q1, q2):
-    for q1x, q1y in zip(q1, q2):
-        diff = q1x - q1y
-        if diff != int(diff):
-            return False
-    else:
-        return True
-
-
-def all_connections(connections):
-    sorted_connections = set()
-    for k1, k2 in connections:
-        sorted_connections.add((k2, k1))
-        sorted_connections.add((k1, k2))
-    return sorted_connections
-
-
-class UnitCell2D:
+class UnitCell3D:
     def __init__(
             self,
-            a1, a2,
+            a1, a2, a3,
             particle_positions,
             particle_masses,
             internal_connections,
             external_connections_x,
             external_connections_y,
+            external_connections_z,
     ):
         """Creates a 2D unit cell with the given edge vectors a1 and a2,
         particle positions, and particle connections.
 
-        a1 and a2 are position-space vectors in R^2 defining the left and
-        bottom edges of the cell. Namely, the cell be defined by the four
+        a1, a2, and a3 are position-space vectors in R^2 defining the left and
+        bottom edges of the cell. Namely, the cell be defined by the eight
         points:
-            {0, a1, a2, a1+a2}
+            {0, a1, a2, a3, a1+a2, a2+a3, a3+a1, a1+a2+a3}
 
         The cell will contain N particles, where N = len(particle_positions).
         The particles will be assigned labels
@@ -64,11 +48,12 @@ class UnitCell2D:
 
         :param b1: 2-vector specifying the lower edge of the unit cell
         :param b2: 2-vector specifying the left edge of the unit cell
-        :param particle_positions: list of 2-vectors (xj, yj) in
-        the ordered basis {b1, b2}, specifying the positions of the
+        :param particle_positions: list of 3-vectors [xj, yj, zj] in
+        the ordered basis {a1, a2, a3}, specifying the positions of the
         particles in the cell. Note these must satisfy all of
             0 <= xj < 1
             0 <= yj < 1
+            0 <= zj < 1
         This is to ensure that arraying the cells in a lattice does not
         result in particles on top of each other.
         :param internal_connections: List of 2-tuples (p1, p2) where p1 and
@@ -83,11 +68,13 @@ class UnitCell2D:
         """
         self.a1 = array(a1)
         self.a2 = array(a2)
+        self.a3 = array(a3)
         self.particle_positions = particle_positions
         self.particle_masses = particle_masses
-        self.internal_connections = _all_connections(internal_connections)
+        self.internal_connections = all_connections(internal_connections)
         self.external_connections_x = external_connections_x
         self.external_connections_y = external_connections_y
+        self.external_connections_z = external_connections_z
         self.num_particles = len(self.particle_positions)
 
     def connected_int(self, k1, k2):
@@ -99,85 +86,29 @@ class UnitCell2D:
     def connected_y(self, k1, k2):
         return (k1, k2) in self.external_connections_y
 
+    def connected_z(self, k1, k2):
+        return (k1, k2) in self.external_connections_z
+
     def mass(self, k):
         return self.particle_masses[k]
 
-    def position(self, k, p=(0, 0)):
-        x, y = self.particle_positions[k]
-        return (x + p[0]) * self.a1 + (y + p[1]) * self.a2
-
-
-# Examples
-LINE_2D = UnitCell2D(
-    a1=(1, 0), a2=(0, 1),
-    particle_positions=[(0, 0)],
-    particle_masses=[0],
-    internal_connections=[],
-    external_connections_x=[(0, 0)],
-    external_connections_y=[]
-)
-SQUARE_2D = UnitCell2D(
-    a1=(1, 0), a2=(0, 1),
-    particle_positions=[(0, 0)],
-    particle_masses=[0],
-    internal_connections=[],
-    external_connections_x=[(0, 0)],
-    external_connections_y=[(0, 0)]
-)
-
-
-class BlochVector:
-    def __init__(self, q):
-        self.q = array(q)
-
-    def __eq__(self, other):
-        if not isinstance(other, BlochVector):
-            return False
-        else:
-            return self.canonical_form().all() == other.canonical_form().all()
-
-    def __hash__(self):
-        return int(dot(self.q, self.q))
-
-    def __neg__(self):
-        return BlochVector(-self.q)
-
-    def __add__(self, other):
-        return BlochVector(self.q + other.q)
-
-    def __sub__(self, other):
-        return BlochVector(self.q - other.q)
-
-    def __mul__(self, other):
-        return BlochVector(other * self.q)
-
-    def __getitem__(self, item):
-        return self.q[item]
-
-    def __len__(self):
-        return len(self.q)
-
-    def canonical_form(self):
-        return array([qi - int(qi) for qi in self.q])
-
-    def dot(self, other):
-        assert len(other) == len(self)
-        other = array(other)
-        return np.dot(self.q, other)
+    def position(self, k, p=(0, 0, 0)):
+        x, y, z = self.particle_positions[k]
+        return (x + p[0]) * self.a1 + (y + p[1]) * self.a2 + (z + p[2]) * self.a3
 
 
 class Lattice2D:
-    def __init__(self, unit_cell, N_x, N_y, c_matrix):
+    def __init__(self, unit_cell, N, c_matrix):
         self.unit_cell = unit_cell
-        self.Nx = N_x
-        self.Ny = N_y
+        self.N = array(N)
+        self.dim = len(self.N)
         self.M = self.unit_cell.num_particles
         # self.b1, self.b2 = self._set_b_vectors()
         self.c_matrix = c_matrix
         self._evals_dict = dict()
         self._evect_dict = dict()
         self._indices = list(
-            product(range(self.M), range(2))
+            product(range(self.M), range(self.dim))
         )
 
     def are_connected(self, k1, p1, k2, p2):
@@ -188,20 +119,18 @@ class Lattice2D:
         :param k2: Index of particle 2 in unit cell
         :param p2: Position index (nx, ny) of unit cell 2
         """
-        nx1, ny1 = p1
-        nx2, ny2 = p2
-        if abs(nx1-nx2) + abs(ny1-ny2) > 1:
-            return False
-        elif nx1 - nx2 == 1 or nx2 - nx1 == self.Nx - 1:
-            return self.unit_cell.connected_x(k2, k1)
-        elif nx2 - nx1 == 1 or nx1 - nx2 == self.Nx - 1:
-            return self.unit_cell.connected_x(k1, k2)
-        elif ny1 - ny2 == 1 or ny2 - ny1 == self.Ny - 1:
-            return self.unit_cell.connected_y(k2, k1)
-        elif ny2 - ny1 == 1 or ny1 - ny2 == self.Ny - 1:
-            return self.unit_cell.connected_y(k1, k2)
-        else:
+        p1 = array(p1)
+        p2 = array(p2)
+        disp = p1 - p2
+        if norm(disp, ord=1) == 0:  # internal
             return self.unit_cell.connected_int(k1, k2)
+        for i in range(len(self.N)):
+            if p1[i] - p2[i] == 1 or p2[i] - p1[i] == self.N[i] - 1:
+                return self.unit_cell.connected_ext(k2, k1, axis=i)
+            elif p2[i] - p1[i] == 1 or p1[i] - p2[i] == self.N[i] - 1:
+                return self.unit_cell.connected_ext(k1, k2, axis=i)
+        else:
+            return False
 
     def position(self, k, p):
         return self.unit_cell.position(k, p)
@@ -346,34 +275,3 @@ class Lattice2D:
         self._evals_dict[q] = evals
         self._evect_dict[q] = evects
 
-
-def get_cmat_harmonic_interaction2d(k, g):
-    def cmat_harmonic_interaction2d(lattice2d, k1, x1, p1, k2, x2, p2):
-        if (k1, x1, p1) == (k2, x2, p2):
-            return k
-        elif lattice2d.are_connected(k1, p1, k2, p2):
-            return -g/2
-        return 0
-    return cmat_harmonic_interaction2d
-
-
-# # Simple example
-# line_x = UnitCell2D(
-#     a1=[1, 0], a2=[0, 1],
-#     particle_positions=[0],
-#     particle_masses=[1],
-#     internal_connections=[],
-#     external_connections_x=[(0, 0)],
-#     external_connections_y=[(0, 0)]
-# )
-#
-# c_mat = get_cmat_harmonic_interaction2d(k=1, g=1/100)
-#
-# lattice = Lattice2D(
-#     unit_cell=line_x, N_x=2, N_y=2, c_matrix=c_mat,
-# )
-#
-# for q in lattice.operator_q_vectors():
-#     for v in range(lattice.M * 2):
-#         a = lattice.annihilation_operator(q, v)
-#         print(a)
