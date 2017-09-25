@@ -357,23 +357,23 @@ def get_cmat_harmonic_interaction2d(k, g):
     return cmat_harmonic_interaction2d
 
 
-# Simple example
-line_x = UnitCell2D(
-    a1=[1, 0], a2=[0, 1],
-    particle_positions=[0],
-    particle_masses=[1],
-    internal_connections=[],
-    external_connections_x=[(0, 0)],
-    external_connections_y=[(0, 0)]
-)
-
-c_mat = get_cmat_harmonic_interaction2d(k=1, g=1/100)
-
-lattice = Lattice2D(
-    unit_cell=line_x, N_x=2, N_y=2, c_matrix=c_mat,
-)
-
-for q in lattice.operator_q_vectors():
-    for v in range(lattice.M * 2):
-        a = lattice.annihilation_operator(q, v)
-        print(a)
+# # Simple example
+# line_x = UnitCell2D(
+#     a1=[1, 0], a2=[0, 1],
+#     particle_positions=[0],
+#     particle_masses=[1],
+#     internal_connections=[],
+#     external_connections_x=[(0, 0)],
+#     external_connections_y=[(0, 0)]
+# )
+#
+# c_mat = get_cmat_harmonic_interaction2d(k=1, g=1/100)
+#
+# lattice = Lattice2D(
+#     unit_cell=line_x, N_x=2, N_y=2, c_matrix=c_mat,
+# )
+#
+# for q in lattice.operator_q_vectors():
+#     for v in range(lattice.M * 2):
+#         a = lattice.annihilation_operator(q, v)
+#         print(a)
