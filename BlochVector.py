@@ -1,4 +1,4 @@
-from numpy import array, dot
+from numpy import array
 import numpy as np
 
 

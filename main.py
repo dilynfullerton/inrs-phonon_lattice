@@ -1,7 +1,8 @@
 from matplotlib import pyplot as plt
 from numpy.linalg import norm
 import itertools as it
-from phonon_lattice import *
+from PhononLattice import *
+from UnitCell import *
 
 
 # Simple 1D Harmonic oscillator lattice
