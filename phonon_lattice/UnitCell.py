@@ -20,9 +20,8 @@ class UnitCell:
             external_connections,
     ):
         self.a_vectors = [array(a) for a in a_vectors]
-        self.a_matrix = np.hstack(self.a_vectors)
+        self.a_matrix = np.vstack(self.a_vectors).T
         self.dim = len(a_vectors)
-        assert self.a_matrix.shape == (self.dim, self.dim)
         self.particle_positions = [array(pos) for pos in particle_positions]
         self.particle_masses = particle_masses
         self.internal_connections = _all_connections(internal_connections)
@@ -114,7 +113,6 @@ class UnitCell1D(UnitCell):
             ]
         )
         self.a1 = self.a_vectors[0]
-        self.a2 = self.a_vectors[1]
 
     def connected_x(self, k1, k2):
         return (k1, k2) in self.external_connections[0]
