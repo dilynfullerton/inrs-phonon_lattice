@@ -51,13 +51,13 @@ class PhononLattice:
 
     def unit_cells(self):
         ranges = [range(n) for n in self.N]
-        return it.product(*ranges)
+        return (array(a) for a in it.product(*ranges))
 
     def d_matrix(self, k1, x1, k2, x2):
         def _d(q):
             d = 0
             for p in self.unit_cells():
-                dp = self.c_matrix(self, k1, x1, p, k2, x2, p)
+                dp = self.c_matrix(self, k1, x1, np.zeros_like(p), k2, x2, p)
                 dp *= exp(1j * 2*pi * q.dot(p))
                 d += dp
             return d * 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
