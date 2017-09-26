@@ -1,4 +1,4 @@
-from numpy import array
+from numpy import array, dot
 import numpy as np
 
 
@@ -13,7 +13,7 @@ class BlochVector:
             return self.canonical_form().all() == other.canonical_form().all()
 
     def __hash__(self):
-        return int(dot(self.q, self.q))
+        return int(abs(self))
 
     def __neg__(self):
         return BlochVector(-self.q)
@@ -32,6 +32,9 @@ class BlochVector:
 
     def __len__(self):
         return len(self.q)
+
+    def __abs__(self):
+        return np.linalg.norm(self.canonical_form(), ord=2)
 
     def canonical_form(self):
         return array([qi - int(qi) for qi in self.q])

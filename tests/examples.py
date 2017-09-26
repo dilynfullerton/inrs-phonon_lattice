@@ -1,5 +1,5 @@
-from phonon_lattice import *
 from matplotlib import pyplot as plt
+from ..tests import *
 
 
 # Simple 1D Harmonic oscillator lattice
