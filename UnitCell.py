@@ -1,5 +1,6 @@
-import numpy as np
 import itertools as it
+
+import numpy as np
 from numpy import array, dot, cos, sin
 
 
