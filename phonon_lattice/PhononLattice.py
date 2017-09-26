@@ -4,7 +4,7 @@ import qutip
 from numpy import array, exp, sqrt, pi, dot
 from numpy.linalg import norm, eigh, inv
 from scipy.linalg import sqrtm
-from BlochVector import BlochVector
+from .BlochVector import BlochVector
 
 
 class PhononLattice:
@@ -221,4 +221,3 @@ class PhononLattice3D(PhononLattice):
         self.Nx = N_x
         self.Ny = N_y
         self.Nz = N_z
-
