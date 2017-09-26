@@ -22,6 +22,9 @@ class PhononLattice:
             it.product(range(self.M), range(self.dim))
         )
 
+    def num_connections(self, k, p):
+        return self.unit_cell.num_connections(k)
+
     def are_connected(self, k1, p1, k2, p2):
         """Returns true if there is a connection between particle number k1
         in unit cell p1 and particle number k2 in unit cell p2
@@ -172,7 +175,7 @@ class PhononLattice:
                 k2, x2 = k2x2
                 d_mat[i, j] = self.d_matrix(k1, x1, k2, x2)(q)
                 if i != j:
-                    d_mat[j, i] = np.conj(d_mat[i][j])
+                    d_mat[j, i] = np.conj(d_mat[i, j])
         return d_mat
 
     def _orthonormal_eigenvectors(self, dmat):

@@ -29,6 +29,17 @@ class UnitCell:
         self.external_connections = external_connections
         self.num_particles = len(self.particle_positions)
 
+    def num_connections(self, k):
+        nc = 0
+        for ic in self.internal_connections:
+            if ic[0] == k:
+                nc += 1
+        for ec_arr in self.external_connections:
+            for ec in ec_arr:
+                if ec[0] == k:
+                    nc += 1
+        return nc
+
     def connected_int(self, k1, k2):
         return (k1, k2) in self.internal_connections
 
