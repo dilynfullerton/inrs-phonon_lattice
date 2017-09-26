@@ -80,21 +80,11 @@ class PhononLattice:
     def d_matrix(self, k1, x1, k2, x2):
         def _d(q):
             d = 0
-            print('k1, x1, k2, x2 = {}, {}, {}, {}'.format(k1, x1, k2, x2))
             for p in self._unit_cells():
                 dp = self.c_matrix(self, k1, x1, np.zeros_like(p), k2, x2, p)
-                dp2 = self.c_matrix(self, k2, x2, p, k1, x1, np.zeros_like(p))
-                assert dp == dp2
-                if dp != 0:
-                    print('p={}'.format(p))
-                    print('dp0={}'.format(dp))
                 dp *= exp(1j * 2*pi * q.dot(p))
-                if dp != 0:
-                    print('dp={}'.format(dp))
                 d += dp
             d *= 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
-            print('d(q) = {}'.format(d))
-            print()
             return d
         return _d
 
@@ -108,14 +98,13 @@ class PhononLattice:
         return _e
 
     def omega2(self, q, v):
-        if q not in self._evals_dict:
+        if q not in self._evals_dict.keys():
             self._set_d_eigenvectors(q)
         return self._evals_dict[q][v]
 
     def q_vectors(self):
         for m in self._unit_cells():
-            vect = [mi/ni for mi, ni in zip(m, self.N)]
-            yield BlochVector(vect)
+            yield BlochVector(m, self.N)
 
     def _A(self):
         for q in self.q_vectors():
@@ -130,7 +119,7 @@ class PhononLattice:
                 yield q
 
     def operator_q_vectors(self):
-        return it.chain(self._A(), self._B())
+        return sorted(it.chain(self._B(), self._A()))
 
     def annihilation_operator(self, q, v):
         if q in self._A():
@@ -143,7 +132,6 @@ class PhononLattice:
 
     def _ops(self, k, x, p, op):
         dim = self.dim_space * self.M * self.Np
-        p = array(p)
         xop = [qutip.qeye(self._nfock)] * dim
         idx = x + self.dim_space * k + self.dim_space * self.M * p[0]
         for i in range(self.dim_space - 1):
@@ -210,8 +198,10 @@ class PhononLattice:
         return evals, [on_evects[:, i] for i in range(len(evals))]
 
     def _set_d_eigenvectors(self, q):
-        evals, evects = self._orthonormal_eigenvectors(
-            dmat=self._get_matrix_rep_d(q))
+        dmat = self._get_matrix_rep_d(q)
+        print('dmat(q={}) =\n{}'.format(q.canonical_form(), dmat))
+        evals, evects = self._orthonormal_eigenvectors(dmat=dmat)
+        print('evals(q={}) =\n{}'.format(q.canonical_form(), evals))
         self._evals_dict[q] = evals
         self._evect_dict[q] = evects
 

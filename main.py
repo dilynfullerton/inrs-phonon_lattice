@@ -10,7 +10,7 @@ from BlochVector import BlochVector
 # ----------------------------------------------------------------
 K = 1  # Spring constant mass * omega0**2
 M1 = 1
-M2 = 1
+M2 = 10
 NX = 40  # Number of particles along line
 
 
@@ -18,12 +18,8 @@ NX = 40  # Number of particles along line
 def get_c_matrix_simple_harmonic_interaction(k):
     def c_matrix(lattice, k1, x1, p1, k2, x2, p2):
         if (k1, x1, p1.all()) == (k2, x2, p2.all()):
-            print('hello1')
-            print(lattice.unit_cell.num_connections(k1))
             return k * lattice.unit_cell.num_connections(k1)
         elif x1 == x2 and lattice.are_connected(k1, p1, k2, p2):
-            assert lattice.are_connected(k2, p2, k1, p1)
-            print('hello2')
             return -k
         else:
             return 0
@@ -71,11 +67,12 @@ print('num_connections(k={})= {}'.format(1, line1d.num_connections(1)))
 # Construct lattice
 lat = PhononLattice1D(
     unit_cell=line1d, N_x=NX,
-    c_matrix=get_c_matrix_simple_harmonic_interaction(k=K)
+    c_matrix=get_c_matrix_simple_harmonic_interaction(k=K),
+
 )
 
 # Check D matrix
-dmat = lat._get_matrix_rep_d(q=BlochVector([1/NX]))
+dmat = lat._get_matrix_rep_d(q=BlochVector(q=[1], N=[NX]))
 print(dmat)
 
 # Plot eigenvalues vs. q
