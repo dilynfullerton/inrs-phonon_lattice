@@ -38,15 +38,18 @@ class UnitCell:
         return nc
 
     def connected(self, k1, k2, axis):
-        if isinstance(axis, int):
-            idx = axis
-        else:
-            idx = sum([2**i * a for a, i in zip(reversed(axis), it.count())])
+        idx = sum([2**i * a for a, i in zip(reversed(axis), it.count())])
+        if idx < 0:
+            idx = -idx
+            k1, k2 = k2, k1
         c = self.connections[idx]
-        return (k1, k2) in c
+        if idx == 0:
+            return (k1, k2) in c or (k2, k1) in c
+        else:
+            return (k1, k2) in c
 
     def connected_int(self, k1, k2):
-        return self.connected(k1, k2, axis=0)
+        return self.connected(k1, k2, axis=[0]*self.dim)
 
     def mass(self, k):
         return self.particle_masses[k]

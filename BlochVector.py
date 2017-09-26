@@ -42,4 +42,4 @@ class BlochVector:
     def dot(self, other):
         assert len(other) == len(self)
         other = array(other)
-        return np.dot(self.q, other)
+        return np.dot(self.canonical_form(), other)

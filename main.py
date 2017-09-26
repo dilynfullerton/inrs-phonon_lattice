@@ -19,8 +19,10 @@ def get_c_matrix_simple_harmonic_interaction(k):
     def c_matrix(lattice, k1, x1, p1, k2, x2, p2):
         if (k1, x1, p1.all()) == (k2, x2, p2.all()):
             print('hello1')
+            print(lattice.unit_cell.num_connections(k1))
             return k * lattice.unit_cell.num_connections(k1)
         elif x1 == x2 and lattice.are_connected(k1, p1, k2, p2):
+            assert lattice.are_connected(k2, p2, k1, p1)
             print('hello2')
             return -k
         else:
@@ -73,10 +75,8 @@ lat = PhononLattice1D(
 )
 
 # Check D matrix
-dmat = lat._get_matrix_rep_d(q=BlochVector([0]))
+dmat = lat._get_matrix_rep_d(q=BlochVector([1/NX]))
 print(dmat)
-
-assert False
 
 # Plot eigenvalues vs. q
 xdat = []

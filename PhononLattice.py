@@ -2,7 +2,7 @@ import itertools as it
 from functools import reduce
 import numpy as np
 import qutip
-from numpy import array, exp, sqrt, pi, dot
+from numpy import array, exp, sqrt, pi, dot, sign
 from numpy.linalg import eigh, inv
 from scipy.linalg import sqrtm
 from BlochVector import BlochVector
@@ -40,19 +40,23 @@ class PhononLattice:
         :param p2: Position index (nx, ny) of unit cell 2
         """
         disp = self.cell_displacement(p2, p1)
+        is_neg_neighbor = reduce(
+            lambda a, b: a and b, map(lambda x: x == 0 or x == -1, disp), True)
         is_pos_neighbor = reduce(
             lambda a, b: a and b, map(lambda x: x == 0 or x == 1, disp), True)
-        if not is_pos_neighbor:
-            return False
+        if is_pos_neighbor:
+            return self.unit_cell.connected(k1, k2, disp)
+        elif is_neg_neighbor:
+            return self.are_connected(k2, p2, k1, p1)
         else:
-            return self.unit_cell.connected(k1, k2, axis=disp)
+            return False
 
     def cell_displacement(self, p1, p2):
         dp0 = p1 - p2
         dp1 = np.empty_like(dp0)
         for di, Ni, i in zip(dp0, self.N, it.count()):
-            if di > 1 and di == Ni - 1:
-                dp1[i] = -1
+            if abs(di) > 1 and abs(di) == Ni - 1:
+                dp1[i] = -sign(di)
             else:
                 dp1[i] = di
         return dp1
@@ -79,9 +83,14 @@ class PhononLattice:
             print('k1, x1, k2, x2 = {}, {}, {}, {}'.format(k1, x1, k2, x2))
             for p in self._unit_cells():
                 dp = self.c_matrix(self, k1, x1, np.zeros_like(p), k2, x2, p)
+                dp2 = self.c_matrix(self, k2, x2, p, k1, x1, np.zeros_like(p))
+                assert dp == dp2
                 if dp != 0:
                     print('p={}'.format(p))
+                    print('dp0={}'.format(dp))
                 dp *= exp(1j * 2*pi * q.dot(p))
+                if dp != 0:
+                    print('dp={}'.format(dp))
                 d += dp
             d *= 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
             print('d(q) = {}'.format(d))
