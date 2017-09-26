@@ -1,8 +1,9 @@
 import itertools as it
+from functools import reduce
 import numpy as np
 import qutip
 from numpy import array, exp, sqrt, pi, dot
-from numpy.linalg import norm, eigh, inv
+from numpy.linalg import eigh, inv
 from scipy.linalg import sqrtm
 from .BlochVector import BlochVector
 
@@ -34,24 +35,36 @@ class PhononLattice:
         :param k2: Index of particle 2 in unit cell
         :param p2: Position index (nx, ny) of unit cell 2
         """
-        p1 = array(p1)
-        p2 = array(p2)
-        disp = p1 - p2
-        if norm(disp, ord=1) == 0:  # internal
-            return self.unit_cell.connected_int(k1, k2)
-        for i in range(len(self.N)):
-            if p1[i] - p2[i] == 1 or p2[i] - p1[i] == self.N[i] - 1:
-                return self.unit_cell.connected_ext(k2, k1, axis=i)
-            elif p2[i] - p1[i] == 1 or p1[i] - p2[i] == self.N[i] - 1:
-                return self.unit_cell.connected_ext(k1, k2, axis=i)
-        else:
+        disp = self.cell_displacement(p1, p2)
+        is_neg_neighbor = reduce(
+            lambda a, b: a and b, map(lambda x: x == 0 or x == -1, disp), True)
+        is_pos_neighbor = reduce(
+            lambda a, b: a and b, map(lambda x: x == 0 or x == 1, disp), True)
+        if not is_neg_neighbor and not is_pos_neighbor:
             return False
+        elif is_neg_neighbor:
+            disp = -disp
+            k1, k2 = k2, k1
+        return self.unit_cell.connected(k1, k2, axis=disp)
 
-    def position(self, k, p):
-        return self.unit_cell.position(k, p)
+    def cell_displacement(self, p1, p2):
+        dp0 = p1 - p2
+        dp1 = np.empty_like(dp0)
+        for di, Ni, i in zip(dp0, self.N, it.count()):
+            if di > 1 and di == Ni - 1:
+                dp1[i] = -1
+            else:
+                dp1[i] = di
+        return dp1
+
+    def displacement_mod_a(self, k1, p1, k2, p2):
+        kdisp = self.unit_cell.displacement_mod_a(k1, k2)
+        pdisp = self.cell_displacement(p1, p2)
+        return kdisp + pdisp
 
     def displacement(self, k1, p1, k2, p2):
-        return self.position(k2, p2) - self.position(k1, p1)
+        return dot(self.unit_cell.a_matrix,
+                   self.displacement_mod_a(k1, p1, k2, p2))
 
     def unit_cells(self):
         ranges = [range(n) for n in self.N]
