@@ -43,10 +43,7 @@ class UnitCell:
         else:
             idx = sum([2**i * a for a, i in zip(reversed(axis), it.count())])
         c = self.connections[idx]
-        if idx == 0:  # internal connection
-            return (k1, k2) in c or (k2, k1) in c
-        else:
-            return (k1, k2) in c
+        return (k1, k2) in c
 
     def connected_int(self, k1, k2):
         return self.connected(k1, k2, axis=0)

@@ -24,8 +24,12 @@ class PhononLattice:
             it.product(range(self.M), range(self.dim_space))
         )
 
-    def num_connections(self, k, p):
-        return self.unit_cell.num_connections(k)
+    def b_matrix(self):
+        return 2*pi * inv(self.unit_cell.a_matrix.conj().T)
+
+    def b_vectors(self):
+        b = self.b_matrix()
+        return [b[:, i] for i in range(self.dim_space)]
 
     def are_connected(self, k1, p1, k2, p2):
         """Returns true if there is a connection between particle number k1
@@ -35,17 +39,13 @@ class PhononLattice:
         :param k2: Index of particle 2 in unit cell
         :param p2: Position index (nx, ny) of unit cell 2
         """
-        disp = self.cell_displacement(p1, p2)
-        is_neg_neighbor = reduce(
-            lambda a, b: a and b, map(lambda x: x == 0 or x == -1, disp), True)
+        disp = self.cell_displacement(p2, p1)
         is_pos_neighbor = reduce(
             lambda a, b: a and b, map(lambda x: x == 0 or x == 1, disp), True)
-        if not is_neg_neighbor and not is_pos_neighbor:
+        if not is_pos_neighbor:
             return False
-        elif is_neg_neighbor:
-            disp = -disp
-            k1, k2 = k2, k1
-        return self.unit_cell.connected(k1, k2, axis=disp)
+        else:
+            return self.unit_cell.connected(k1, k2, axis=disp)
 
     def cell_displacement(self, p1, p2):
         dp0 = p1 - p2
@@ -66,18 +66,27 @@ class PhononLattice:
         return dot(self.unit_cell.a_matrix,
                    self.displacement_mod_a(k1, p1, k2, p2))
 
-    def unit_cells(self):
+    def _unit_cells(self):
         ranges = [range(n) for n in self.N]
         return (array(a) for a in it.product(*ranges))
+
+    def _particles(self):
+        return it.product(range(self.M), range(self.dim_space))
 
     def d_matrix(self, k1, x1, k2, x2):
         def _d(q):
             d = 0
-            for p in self.unit_cells():
+            print('k1, x1, k2, x2 = {}, {}, {}, {}'.format(k1, x1, k2, x2))
+            for p in self._unit_cells():
                 dp = self.c_matrix(self, k1, x1, np.zeros_like(p), k2, x2, p)
+                if dp != 0:
+                    print('p={}'.format(p))
                 dp *= exp(1j * 2*pi * q.dot(p))
                 d += dp
-            return d * 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
+            d *= 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
+            print('d(q) = {}'.format(d))
+            print()
+            return d
         return _d
 
     def e(self, k, x, v):
@@ -95,7 +104,7 @@ class PhononLattice:
         return self._evals_dict[q][v]
 
     def q_vectors(self):
-        for m in self.unit_cells():
+        for m in self._unit_cells():
             vect = [mi/ni for mi, ni in zip(m, self.N)]
             yield BlochVector(vect)
 
@@ -146,7 +155,7 @@ class PhononLattice:
         real_pz = 0+0j
         imag_pz = 0+0j
         for k, x, p in it.product(range(self.M), range(self.dim_space),
-                                  self.unit_cells()):
+                                  self._unit_cells()):
             zi = exp(-1j * 2*np.pi * (q.dot(p)))
             zi *= sqrt(self.unit_cell.mass(k)/self.unit_cell.mass(0))
             zi *= np.conj(self.e(k, x, v)(q)) / sqrt(self.Np)
@@ -179,17 +188,11 @@ class PhononLattice:
 
     def _get_matrix_rep_d(self, q):
         d_mat = np.empty(shape=(self.dim_d, self.dim_d), dtype=np.complex)
-        for k1x1, i in zip(it.product(range(self.M), range(self.dim_space)),
-                           it.count()):
+        for k1x1, i in zip(self._particles(), it.count()):
             k1, x1 = k1x1
-            for k2x2, j in zip(
-                    it.product(range(k1, self.M), range(x1, self.dim_space)),
-                    it.count()
-            ):
+            for k2x2, j in zip(self._particles(), it.count()):
                 k2, x2 = k2x2
                 d_mat[i, j] = self.d_matrix(k1, x1, k2, x2)(q)
-                if i != j:
-                    d_mat[j, i] = np.conj(d_mat[i, j])
         return d_mat
 
     def _orthonormal_eigenvectors(self, dmat):
