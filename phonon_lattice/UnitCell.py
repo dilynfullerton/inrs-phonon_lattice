@@ -1,5 +1,6 @@
 import numpy as np
-from numpy import array, dot
+import itertools as it
+from numpy import array, dot, cos, sin
 
 
 def _all_connections(connections):
@@ -16,40 +17,48 @@ class UnitCell:
             a_vectors,
             particle_positions,
             particle_masses,
-            internal_connections,
-            external_connections,
+            connections,
     ):
         self.a_vectors = [array(a) for a in a_vectors]
         self.a_matrix = np.vstack(self.a_vectors).T
         self.dim = len(a_vectors)
         self.particle_positions = [array(pos) for pos in particle_positions]
         self.particle_masses = particle_masses
-        self.internal_connections = _all_connections(internal_connections)
-        self.external_connections = external_connections
+        self.connections = connections
         self.num_particles = len(self.particle_positions)
 
     def num_connections(self, k):
         nc = 0
-        for ic in self.internal_connections:
-            if ic[0] == k:
-                nc += 1
-        for ec_arr in self.external_connections:
+        for ec_arr in self.connections:
             for ec in ec_arr:
                 if ec[0] == k:
                     nc += 1
+                if ec[1] == k:
+                    nc += 1
         return nc
 
-    def connected_int(self, k1, k2):
-        return (k1, k2) in self.internal_connections
+    def connected(self, k1, k2, axis):
+        if isinstance(axis, int):
+            idx = axis
+        else:
+            idx = sum([2**i * a for a, i in zip(reversed(axis), it.count())])
+        c = self.connections[idx]
+        if idx == 0:  # internal connection
+            return (k1, k2) in c or (k2, k1) in c
+        else:
+            return (k1, k2) in c
 
-    def connected_ext(self, k1, k2, axis):
-        return (k1, k2) in self.external_connections[axis]
+    def connected_int(self, k1, k2):
+        return self.connected(k1, k2, axis=0)
 
     def mass(self, k):
         return self.particle_masses[k]
 
-    def position(self, k, p):
-        return dot(self.a_matrix, self.particle_positions[k] + p)
+    def displacement_mod_a(self, k1, k2):
+        return self.particle_positions[k1] - self.particle_positions[k2]
+
+    def displacement(self, k1, k2):
+        return dot(self.a_matrix, self.displacement_mod_a(k1, k2))
 
 
 class UnitCell1D(UnitCell):
@@ -57,8 +66,8 @@ class UnitCell1D(UnitCell):
             self, a1,
             particle_positions,
             particle_masses,
-            internal_connections,
-            external_connections_x,
+            internal_connections=list(),
+            external_connections_x=list(),
     ):
         """Creates a 1D unit cell with the given edge vector a1,
         particle positions, and particle connections.
@@ -107,15 +116,15 @@ class UnitCell1D(UnitCell):
             a_vectors=[a1],
             particle_positions=particle_positions,
             particle_masses=particle_masses,
-            internal_connections=internal_connections,
-            external_connections=[
-                external_connections_x,
+            connections=[
+                internal_connections,  # 0 = x
+                external_connections_x,  # 1
             ]
         )
         self.a1 = self.a_vectors[0]
 
     def connected_x(self, k1, k2):
-        return (k1, k2) in self.external_connections[0]
+        return self.connected(k1, k2, axis=1)
 
 
 class UnitCell2D(UnitCell):
@@ -123,9 +132,10 @@ class UnitCell2D(UnitCell):
             self, a1, a2,
             particle_positions,
             particle_masses,
-            internal_connections,
-            external_connections_x,
-            external_connections_y,
+            internal_connections=list(),
+            external_connections_x=list(),
+            external_connections_y=list(),
+            external_connections_xy=list(),
     ):
         """Creates a 2D unit cell with the given edge vectors a1 and a2,
         particle positions, and particle connections.
@@ -180,20 +190,24 @@ class UnitCell2D(UnitCell):
             a_vectors=[a1, a2],
             particle_positions=particle_positions,
             particle_masses=particle_masses,
-            internal_connections=internal_connections,
-            external_connections=[
-                external_connections_x,
-                external_connections_y
+            connections=[
+                internal_connections,  # 00 = xy
+                external_connections_y,  # 01
+                external_connections_x,  # 10
+                external_connections_xy,  # 11
             ]
         )
         self.a1 = self.a_vectors[0]
         self.a2 = self.a_vectors[1]
 
-    def connected_x(self, k1, k2):
-        return (k1, k2) in self.external_connections[0]
-
     def connected_y(self, k1, k2):
-        return (k1, k2) in self.external_connections[1]
+        return self.connected(k1, k2, axis=(0, 1))
+
+    def connected_x(self, k1, k2):
+        return self.connected(k1, k2, axis=(1, 0))
+
+    def connected_xy(self, k1, k2):
+        return self.connected(k1, k2, axis=(1, 1))
 
 
 class UnitCell3D(UnitCell):
@@ -201,10 +215,14 @@ class UnitCell3D(UnitCell):
             self, a1, a2, a3,
             particle_positions,
             particle_masses,
-            internal_connections,
-            external_connections_x,
-            external_connections_y,
-            external_connections_z,
+            internal_connections=list(),
+            external_connections_x=list(),
+            external_connections_y=list(),
+            external_connections_z=list(),
+            external_connections_xy=list(),
+            external_connections_xz=list(),
+            external_connections_yz=list(),
+            external_connections_xyz=list()
     ):
         """Creates a 3D unit cell with the given edge vectors a1, a2, adn a3,
         particle positions, and particle connections.
@@ -266,24 +284,95 @@ class UnitCell3D(UnitCell):
             a_vectors=[a1, a2, a3],
             particle_positions=particle_positions,
             particle_masses=particle_masses,
-            internal_connections=internal_connections,
-            external_connections=[
-                external_connections_x,
-                external_connections_y,
-                external_connections_z
+            connections=[
+                internal_connections,      # 000 = xyz
+                external_connections_z,    # 001
+                external_connections_y,    # 010
+                external_connections_yz,   # 011
+                external_connections_x,    # 100
+                external_connections_xz,   # 101
+                external_connections_xy,   # 110
+                external_connections_xyz,  # 111
             ]
         )
         self.a1 = self.a_vectors[0]
         self.a2 = self.a_vectors[1]
         self.a3 = self.a_vectors[2]
 
-    def connected_x(self, k1, k2):
-        return (k1, k2) in self.external_connections[0]
 
-    def connected_y(self, k1, k2):
-        return (k1, k2) in self.external_connections[1]
+# Functions for easy generation
+def simple_cubic3d(a, mass, phi=0, theta=0, psi=0):
+    return UnitCell3D(
+        a1=a * array([1, 0, 0]),
+        a2=a * array([sin(phi), cos(phi), 0]),
+        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        particle_positions=[[0, 0, 0]],
+        particle_masses=[mass],
+        internal_connections=[],
+        external_connections_x=[(0, 0)],
+        external_connections_y=[(0, 0)],
+        external_connections_z=[(0, 0)]
+    )
 
-    def connected_z(self, k1, k2):
-        return (k1, k2) in self.external_connections[2]
+
+def body_centered_cubic3d(a, mass_corner, mass_center, phi=0, theta=0, psi=0):
+    return UnitCell3D(
+        a1=a * array([1, 0, 0]),
+        a2=a * array([sin(phi), cos(phi), 0]),
+        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        particle_positions=[[0, 0, 0], [1/2, 1/2, 1/2]],
+        particle_masses=[mass_corner, mass_center],
+        internal_connections=[(0, 1)],
+        external_connections_x=[(0, 0), (1, 0)],
+        external_connections_y=[(0, 0), (1, 0)],
+        external_connections_z=[(0, 0), (1, 0)],
+        external_connections_xy=[(1, 0)],
+        external_connections_yz=[(1, 0)],
+        external_connections_xz=[(1, 0)],
+        external_connections_xyz=[(1, 0)],
+    )
 
 
+def face_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0):
+    return UnitCell3D(
+        a1=a * array([1, 0, 0]),
+        a2=a * array([sin(phi), cos(phi), 0]),
+        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        particle_positions=[
+            [0, 0, 0],  # corner
+            [0, 1/2, 1/2], [1/2, 0, 1/2], [1/2, 1/2, 0],  # faces
+        ],
+        particle_masses=[
+            mass_corner,
+            mass_face, mass_face, mass_face
+        ],
+        internal_connections=[(0, 1), (0, 2), (0, 3)],
+        external_connections_x=[(0, 0), (2, 0), (3, 0)],
+        external_connections_y=[(0, 0), (3, 0), (1, 0)],
+        external_connections_z=[(0, 0), (1, 0), (2, 0)],
+        external_connections_xy=[(1, 0), (3, 0)],
+        external_connections_yz=[(1, 0), (1, 0)],
+        external_connections_xz=[(1, 0), (2, 0)],
+        external_connections_xyz=[],
+    )
+
+
+def base_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0):
+    return UnitCell3D(
+        a1=a * array([1, 0, 0]),
+        a2=a * array([sin(phi), cos(phi), 0]),
+        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        particle_positions=[
+            [0, 0, 0],  # corner
+            [1/2, 1/2, 0],  # face
+        ],
+        particle_masses=[mass_corner, mass_face],
+        internal_connections=[(0, 1)],
+        external_connections_x=[(0, 0), (1, 0)],
+        external_connections_y=[(0, 0), (1, 0)],
+        external_connections_z=[(0, 0)],
+        external_connections_xy=[(1, 0)],
+        external_connections_yz=[],
+        external_connections_xz=[],
+        external_connections_xyz=[],
+    )
