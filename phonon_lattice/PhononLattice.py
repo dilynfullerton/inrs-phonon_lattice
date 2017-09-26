@@ -12,14 +12,15 @@ class PhononLattice:
         self.unit_cell = unit_cell
         self.N = array(N)
         self.Np = np.product(self.N)
-        self.dim = len(self.N)
         self.M = self.unit_cell.num_particles
+        self.dim_space = len(self.N)
+        self.dim_d = self.dim_space * self.M
         self._nfock = nfock
         self.c_matrix = c_matrix
         self._evals_dict = dict()
         self._evect_dict = dict()
         self._indices = list(
-            it.product(range(self.M), range(self.dim))
+            it.product(range(self.M), range(self.dim_space))
         )
 
     def num_connections(self, k, p):
@@ -110,12 +111,12 @@ class PhononLattice:
             return 1/2 * (x + 1j*px) + 1j/2 * (y + 1j*py)
 
     def _ops(self, k, x, p, op):
-        dim = self.dim * self.M * self.Np
+        dim = self.dim_space * self.M * self.Np
         p = array(p)
         xop = [qutip.qeye(self._nfock)] * dim
-        idx = x + self.dim * k + self.dim * self.M * p[0]
-        for i in range(self.dim-1):
-            idx += self.dim * self.M * self.N[i] * p[i+1]
+        idx = x + self.dim_space * k + self.dim_space * self.M * p[0]
+        for i in range(self.dim_space - 1):
+            idx += self.dim_space * self.M * self.N[i] * p[i+1]
         xop.insert(idx, op)
         xop.pop(idx+1)
         return qutip.tensor(xop)
@@ -131,7 +132,8 @@ class PhononLattice:
         imag_z = 0+0j
         real_pz = 0+0j
         imag_pz = 0+0j
-        for k, x, p in it.product(range(self.M), range(self.dim), self.unit_cells()):
+        for k, x, p in it.product(range(self.M), range(self.dim_space),
+                                  self.unit_cells()):
             zi = exp(-1j * 2*np.pi * (q.dot(p)))
             zi *= sqrt(self.unit_cell.mass(k)/self.unit_cell.mass(0))
             zi *= np.conj(self.e(k, x, v)(q)) / sqrt(self.Np)
@@ -163,13 +165,12 @@ class PhononLattice:
             return imag_z / l, imag_pz / l
 
     def _get_matrix_rep_d(self, q):
-        dim = self.M * self.dim
-        d_mat = np.empty(shape=(dim, dim), dtype=np.complex)
-        for k1x1, i in zip(it.product(range(self.M), range(self.dim)),
+        d_mat = np.empty(shape=(self.dim_d, self.dim_d), dtype=np.complex)
+        for k1x1, i in zip(it.product(range(self.M), range(self.dim_space)),
                            it.count()):
             k1, x1 = k1x1
             for k2x2, j in zip(
-                    it.product(range(k1, self.M), range(x1, self.dim)),
+                    it.product(range(k1, self.M), range(x1, self.dim_space)),
                     it.count()
             ):
                 k2, x2 = k2x2
