@@ -3,7 +3,7 @@ from functools import reduce
 import numpy as np
 import qutip
 from numpy import array, exp, sqrt, pi, dot, sign
-from numpy.linalg import eigh, inv
+from numpy.linalg import eigh, inv, norm
 from scipy.linalg import sqrtm
 from BlochVector import BlochVector
 
@@ -70,7 +70,7 @@ class PhononLattice:
         return dot(self.unit_cell.a_matrix,
                    self.displacement_mod_a(k1, p1, k2, p2))
 
-    def _unit_cells(self):
+    def unit_cells(self):
         ranges = [range(n) for n in self.N]
         return (array(a) for a in it.product(*ranges))
 
@@ -80,7 +80,7 @@ class PhononLattice:
     def d_matrix(self, k1, x1, k2, x2):
         def _d(q):
             d = 0
-            for p in self._unit_cells():
+            for p in self.unit_cells():
                 dp = self.c_matrix(self, k1, x1, np.zeros_like(p), k2, x2, p)
                 dp *= exp(1j * 2*pi * q.dot(p))
                 d += dp
@@ -98,12 +98,12 @@ class PhononLattice:
         return _e
 
     def omega2(self, q, v):
-        if q not in self._evals_dict.keys():
+        if q not in self._evals_dict:
             self._set_d_eigenvectors(q)
         return self._evals_dict[q][v]
 
     def q_vectors(self):
-        for m in self._unit_cells():
+        for m in self.unit_cells():
             yield BlochVector(m, self.N)
 
     def _A(self):
@@ -152,7 +152,7 @@ class PhononLattice:
         real_pz = 0+0j
         imag_pz = 0+0j
         for k, x, p in it.product(range(self.M), range(self.dim_space),
-                                  self._unit_cells()):
+                                  self.unit_cells()):
             zi = exp(-1j * 2*np.pi * (q.dot(p)))
             zi *= sqrt(self.unit_cell.mass(k)/self.unit_cell.mass(0))
             zi *= np.conj(self.e(k, x, v)(q)) / sqrt(self.Np)
@@ -199,9 +199,7 @@ class PhononLattice:
 
     def _set_d_eigenvectors(self, q):
         dmat = self._get_matrix_rep_d(q)
-        print('dmat(q={}) =\n{}'.format(q.canonical_form(), dmat))
         evals, evects = self._orthonormal_eigenvectors(dmat=dmat)
-        print('evals(q={}) =\n{}'.format(q.canonical_form(), evals))
         self._evals_dict[q] = evals
         self._evect_dict[q] = evects
 
@@ -240,3 +238,39 @@ class PhononLattice3D(PhononLattice):
         self.Nx = N_x
         self.Ny = N_y
         self.Nz = N_z
+
+
+def get_c_matrix_simple_harmonic_interaction(k):
+    def c_matrix(lattice, k1, x1, p1, k2, x2, p2):
+        if (k1, x1, p1.all()) == (k2, x2, p2.all()):
+            return k * lattice.unit_cell.num_connections(k1)
+        elif x1 == x2 and lattice.are_connected(k1, p1, k2, p2):
+            return -k
+        else:
+            return 0
+    return c_matrix
+
+
+def get_c_matrix_coulomb_interaction(g):
+    def c_matrix(lattice, k1, x1, p1, k2, x2, p2):
+        if not lattice.are_connected(k1, p1, k2, p2):
+            return 0  # Only interact with neighbors
+
+        def sterm(ki, pi):
+            if (ki, pi.all()) == (k1, p1.all()):
+                return 0
+            disp = lattice.displacement(ki, pi, k1, p1)
+            t1 = -g * 3 * disp[x1] * disp[x2] / norm(disp, ord=2)**5
+            if x1 != x2:
+                return t1
+            else:
+                return t1 + g / norm(disp, ord=2)**3
+
+        if k1 == k2:
+            s = 0
+            for ki, pi in it.product(range(lattice.M), lattice.unit_cells()):
+                s += sterm(ki, pi)
+            return s
+        else:
+            return -sterm(k2, p2)
+    return c_matrix
