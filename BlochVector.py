@@ -18,11 +18,14 @@ class BlochVector:
         else:
             return (
                 self._canonical_int_list() == other._canonical_int_list() and
-                self.N == other.N
+                self.N.all() == other.N.all()
             )
 
     def __hash__(self):
-        return 0
+        return int(self._canonical_int_list()[0])
+
+    def __cmp__(self, other):
+        return self == other
 
     def __neg__(self):
         return BlochVector(-self.q, self.N)
