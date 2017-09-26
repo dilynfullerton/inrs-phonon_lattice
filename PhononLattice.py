@@ -5,7 +5,7 @@ import qutip
 from numpy import array, exp, sqrt, pi, dot
 from numpy.linalg import eigh, inv
 from scipy.linalg import sqrtm
-from .BlochVector import BlochVector
+from BlochVector import BlochVector
 
 
 class PhononLattice:
