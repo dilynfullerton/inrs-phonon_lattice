@@ -54,9 +54,9 @@ lat_zb = PhononLattice3D(
 lattice_plots = []
 for lat in [lat_fcc, lat_bcc, lat_sc, lat_zb]:
     xdat = []
-    ydats = [[] for v in range(lat.dim_d)]
+    ydats = [[] for v in range(lat.num_modes)]
     labs = [
-        'omega_{q, ' + '{}'.format(v) + '}^2' for v in range(lat.dim_d)]
+        'omega_{q, ' + '{}'.format(v) + '}^2' for v in range(lat.num_modes)]
     for q in sorted(lat.q_vectors()):
         if q[0] == 0:
             continue
@@ -64,7 +64,7 @@ for lat in [lat_fcc, lat_bcc, lat_sc, lat_zb]:
             continue
         print(q)
         xdat.append(q[0])
-        for v in range(lat.dim_d):
+        for v in range(lat.num_modes):
             ydats[v].append(lat.omega2(q, v))
     plots0 = [(xdat, ydat, lab) for ydat, lab in zip(ydats, labs)]
     lattice_plots.append(plots0)
