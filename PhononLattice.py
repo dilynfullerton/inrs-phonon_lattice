@@ -1,19 +1,18 @@
 import itertools as it
-from functools import reduce
 import numpy as np
 import qutip
-from numpy import array, exp, sqrt, pi, dot, sign
+from numpy import exp, sqrt, pi, dot
 from scipy.linalg import sqrtm, eigh, inv, norm
 from BlochVector import BlochVector
+from AbsHamiltonian import AbsPhononHamiltonian
+from Lattice import Lattice
 
 
-class PhononLattice:
-    def __init__(self, unit_cell, N, c_matrix, nfock=2, force_adj_only=True):
-        self.unit_cell = unit_cell
-        self.N = array(N)
-        self.Np = np.product(self.N)
-        self.M = self.unit_cell.num_particles
-        self.dim_space = len(self.N)
+class PhononLattice(Lattice, AbsPhononHamiltonian):
+    def __init__(self, unit_cell, N, c_matrix, nfock=2, force_adj_only=True,
+                 *args, **kwargs):
+        super(PhononLattice, self).__init__(
+            unit_cell=unit_cell, N=N, *args, **kwargs)
         self.dim_d = self.dim_space * self.M
         self._nfock = nfock
         self.c_matrix = c_matrix
@@ -27,6 +26,24 @@ class PhononLattice:
         self.A = set(self._gen_A())
         self.B = set(self._gen_B())
 
+    def omega(self, q, v):
+        return sqrt(self.omega2(q, v))
+
+    def a(self, q, v):
+        if q in self.A:
+            x, px = self._x(q, v)
+            return 1/sqrt(2) * (x + 1j*px)
+        elif q in self.B:
+            x, px = self._x(q, v)
+            y, py = self._y(q, v)
+            return 1/2 * (x + 1j*px) + 1j/2 * (y + 1j*py)
+
+    def _iter_q(self):
+        return self.operator_q_vectors()
+
+    def _iter_v(self):
+        return range(self.dim_d)
+
     def b_matrix(self):
         return 2*pi * inv(self.unit_cell.a_matrix.conj().T)
 
@@ -34,57 +51,7 @@ class PhononLattice:
         b = self.b_matrix()
         return [b[:, i] for i in range(self.dim_space)]
 
-    def are_connected(self, k1, p1, k2, p2):
-        """Returns true if there is a connection between particle number k1
-        in unit cell p1 and particle number k2 in unit cell p2
-        :param k1: Index of particle 1 in unit cell
-        :param p1: Position index (nx, ny) of unit cell 1
-        :param k2: Index of particle 2 in unit cell
-        :param p2: Position index (nx, ny) of unit cell 2
-        """
-        disp = self.cell_displacement(p2, p1)
-        is_neg_neighbor = reduce(
-            lambda a, b: a and b, map(lambda x: x == 0 or x == -1, disp), True)
-        is_pos_neighbor = reduce(
-            lambda a, b: a and b, map(lambda x: x == 0 or x == 1, disp), True)
-        if is_pos_neighbor:
-            return self.unit_cell.connected(k1, k2, disp)
-        elif is_neg_neighbor:
-            return self.are_connected(k2, p2, k1, p1)
-        else:
-            return False
-
-    def cell_displacement(self, p1, p2):
-        dp0 = p1 - p2
-        dp1 = np.empty_like(dp0)
-        for di, Ni, i in zip(dp0, self.N, it.count()):
-            if abs(di) > 1 and abs(di) == Ni - 1:
-                dp1[i] = -sign(di)
-            else:
-                dp1[i] = di
-        return dp1
-
-    def displacement_mod_a(self, k1, p1, k2, p2):
-        kdisp = self.unit_cell.displacement_mod_a(k1, k2)
-        pdisp = self.cell_displacement(p1, p2)
-        return kdisp + pdisp
-
-    def displacement(self, k1, p1, k2, p2):
-        return dot(self.unit_cell.a_matrix,
-                   self.displacement_mod_a(k1, p1, k2, p2))
-
-    def unit_cells(self):
-        ranges = [range(n) for n in self.N]
-        return (array(a) for a in it.product(*ranges))
-
-    def adjacent_cells(self, p):
-        for cell_disp in it.product([-1, 0, 1], repeat=self.dim_space):
-            yield p + np.array(cell_disp)
-
-    def _particles(self):
-        return it.product(range(self.M), range(self.dim_space))
-
-    def d_matrix(self, k1, x1, k2, x2):
+    def d_matrix(self, kappa1, alpha1, kappa2, alpha2):
         if self._force_adj:
             ucells = self.adjacent_cells(p=self._p0)
         else:
@@ -93,15 +60,20 @@ class PhononLattice:
         def _d(q):
             d = 0
             for p in ucells():
-                dp = self.c_matrix(self, k1, x1, self._p0, k2, x2, p)
+                dp = self.c_matrix(lattice=self,
+                                   kappa1=kappa1, alpha1=alpha1, p1=self._p0,
+                                   kappa2=kappa2, alpha2=alpha2, p2=p)
                 dp *= exp(1j * 2*pi * q.dot(p))
                 d += dp
-            d *= 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
+            d *= 1/sqrt(
+                self.unit_cell.mass() *
+                self.unit_cell.mass()
+            )
             return d
         return _d
 
-    def e(self, k, x, v):
-        i = self._indices.index((k, x))
+    def e(self, kappa, alpha, v):
+        i = self._indices.index((kappa, alpha))
 
         def _e(q):
             if q not in self._evals_dict:
@@ -113,13 +85,6 @@ class PhononLattice:
         if q not in self._evals_dict:
             self._set_d_eigenvectors(q)
         return self._evals_dict[q][v]
-
-    def omega(self, q, v):
-        return sqrt(self.omega2(q, v))
-
-    def q_vectors(self):
-        for m in self.unit_cells():
-            yield BlochVector(m, self.N)
 
     def _gen_A(self):
         for q in self.q_vectors():
@@ -136,50 +101,34 @@ class PhononLattice:
     def operator_q_vectors(self):
         return it.chain(self._gen_A(), self._gen_B())
 
-    def annihilation_operator(self, q, v):
-        if q in self.A:
-            x, px = self._x(q, v)
-            return 1/sqrt(2) * (x + 1j*px)
-        elif q in self.B:
-            x, px = self._x(q, v)
-            y, py = self._y(q, v)
-            return 1/2 * (x + 1j*px) + 1j/2 * (y + 1j*py)
-
-    def hamiltonian(self):
-        a = self.annihilation_operator
-        h = 0
-        for q, v in it.product(self.operator_q_vectors(), self.dim_d):
-            h += self.omega(q, v) * (a(q, v).dag() * a(q, v) + 1/2)
-        return h
-
-    def _ops(self, k, x, p, op):
+    def _ops(self, kappa, alpha, p, op):
         dim = self.dim_space * self.M * self.Np
         xop = [qutip.qeye(self._nfock)] * dim
-        idx = x + self.dim_space * k + self.dim_space * self.M * p[0]
+        idx = alpha + self.dim_space * kappa + self.dim_space * self.M * p[0]
         for i in range(self.dim_space - 1):
             idx += self.dim_space * self.M * self.N[i] * p[i+1]
         xop.insert(idx, op)
         xop.pop(idx+1)
         return qutip.tensor(xop)
 
-    def _x_ops(self, k, x, p):
-        return self._ops(k, x, p, op=qutip.position(self._nfock))
+    def _x_ops(self, kappa, alpha, p):
+        return self._ops(kappa, alpha, p, op=qutip.position(self._nfock))
 
-    def _p_ops(self, k, x, p):
-        return self._ops(k, x, p, op=qutip.momentum(self._nfock))
+    def _p_ops(self, kappa, alpha, p):
+        return self._ops(kappa, alpha, p, op=qutip.momentum(self._nfock))
 
     def _z(self, q, v):
         real_z = 0+0j
         imag_z = 0+0j
         real_pz = 0+0j
         imag_pz = 0+0j
-        for k, x, p in it.product(range(self.M), range(self.dim_space),
-                                  self.unit_cells()):
+        for kappa, alpha, p in it.product(range(self.M), range(self.dim_space),
+                                          self.unit_cells()):
             zi = exp(-1j * 2*np.pi * (q.dot(p)))
-            zi *= sqrt(self.unit_cell.mass(k)/self.unit_cell.mass(0))
-            zi *= np.conj(self.e(k, x, v)(q)) / sqrt(self.Np)
-            xop = self._x_ops(k, x, p)
-            pop = self._p_ops(k, x, p)
+            zi *= sqrt(self.unit_cell.mass(kappa) / self.unit_cell.mass(0))
+            zi *= np.conj(self.e(kappa, alpha, v)(q)) / sqrt(self.Np)
+            xop = self._x_ops(kappa, alpha, p)
+            pop = self._p_ops(kappa, alpha, p)
             real_z += zi.real * xop
             imag_z += zi.imag * xop
             real_pz += zi.real * pop
@@ -211,7 +160,8 @@ class PhononLattice:
             k1, x1 = k1x1
             for k2x2, j in zip(self._particles(), it.count()):
                 k2, x2 = k2x2
-                d_mat[i, j] = self.d_matrix(k1, x1, k2, x2)(q)
+                d_mat[i, j] = self.d_matrix(
+                    kappa1=k1, alpha1=x1, kappa2=k2, alpha2=x2)(q)
         return d_mat
 
     def _orthonormal_eigenvectors(self, dmat):
@@ -227,46 +177,40 @@ class PhononLattice:
 
 
 class PhononLattice1D(PhononLattice):
-    def __init__(self, unit_cell, N_x, c_matrix, n_fock=2):
+    def __init__(self, unit_cell, N_x, c_matrix, n_fock=2, *args, **kwargs):
         super(PhononLattice1D, self).__init__(
-            unit_cell=unit_cell,
-            N=[N_x],
-            c_matrix=c_matrix,
-            nfock=n_fock
-        )
+            unit_cell=unit_cell, N=[N_x], c_matrix=c_matrix, nfock=n_fock,
+            *args, **kwargs)
         self.Nx = N_x
 
 
 class PhononLattice2D(PhononLattice):
-    def __init__(self, unit_cell, N_x, N_y, c_matrix, n_fock=2):
+    def __init__(self, unit_cell, N_x, N_y, c_matrix, n_fock=2, *args,
+                 **kwargs):
         super(PhononLattice2D, self).__init__(
-            unit_cell=unit_cell,
-            N=[N_x, N_y],
-            c_matrix=c_matrix,
-            nfock=n_fock
-        )
+            unit_cell=unit_cell, N=[N_x, N_y], c_matrix=c_matrix, nfock=n_fock,
+            *args, **kwargs)
         self.Nx = N_x
         self.Ny = N_y
 
 
 class PhononLattice3D(PhononLattice):
-    def __init__(self, unit_cell, N_x, N_y, N_z, c_matrix, n_fock=2):
+    def __init__(self, unit_cell, N_x, N_y, N_z, c_matrix, n_fock=2,
+                 *args, **kwargs):
         super(PhononLattice3D, self).__init__(
-            unit_cell=unit_cell,
-            N=[N_x, N_y, N_z],
-            c_matrix=c_matrix,
-            nfock=n_fock
-        )
+            unit_cell=unit_cell, N=[N_x, N_y, N_z], c_matrix=c_matrix,
+            nfock=n_fock, *args, **kwargs)
         self.Nx = N_x
         self.Ny = N_y
         self.Nz = N_z
 
 
 def get_c_matrix_simple_harmonic_interaction(k):
-    def c_matrix(lattice, k1, x1, p1, k2, x2, p2):
-        if (k1, x1, p1.all()) == (k2, x2, p2.all()):
-            return k * lattice.unit_cell.num_connections(k1)
-        elif x1 == x2 and lattice.are_connected(k1, p1, k2, p2):
+    def c_matrix(lattice, kappa1, alpha1, p1, kappa2, alpha2, p2):
+        if (kappa1, alpha1, p1.all()) == (kappa2, alpha2, p2.all()):
+            return k * lattice.unit_cell.num_connections(kappa1)
+        elif alpha1 == alpha2 and lattice.are_connected(
+                kappa1=kappa1, p1=p1, kappa2=kappa2, p2=p2):
             return -k
         else:
             return 0
@@ -274,25 +218,26 @@ def get_c_matrix_simple_harmonic_interaction(k):
 
 
 def get_c_matrix_coulomb_interaction(g):
-    def c_matrix(lattice, k1, x1, p1, k2, x2, p2):
-        if not lattice.are_connected(k1, p1, k2, p2):
+    def c_matrix(lattice, kappa1, alpha1, p1, kappa2, alpha2, p2):
+        if not lattice.are_connected(kappa1, p1, kappa2, p2):
             return 0  # Only interact with neighbors
 
-        def sterm(ki, pi):
-            if (ki, pi.all()) == (k1, p1.all()):
+        def sterm(kappa_i, p_i):
+            if (kappa_i, p_i.all()) == (kappa1, p1.all()):
                 return 0
-            disp = lattice.displacement(ki, pi, k1, p1)
-            t1 = -g * 3 * disp[x1] * disp[x2] / norm(disp, ord=2)**5
-            if x1 != x2:
+            disp = lattice.displacement(kappa1=kappa_i, alpha1=p_i,
+                                        kappa2=kappa1, alpha2=p1)
+            t1 = -g * 3 * disp[alpha1] * disp[alpha2] / norm(disp, ord=2)**5
+            if alpha1 != alpha2:
                 return t1
             else:
                 return t1 + g / norm(disp, ord=2)**3
 
-        if k1 == k2:
+        if kappa1 == kappa2:
             s = 0
-            for ki, pi in it.product(range(lattice.M), lattice.unit_cells()):
-                s += sterm(ki, pi)
+            for kappa_i, p_i in it.product(range(lattice.M), lattice.unit_cells()):
+                s += sterm(kappa_i, p_i)
             return s
         else:
-            return -sterm(k2, p2)
+            return -sterm(kappa2, p2)
     return c_matrix

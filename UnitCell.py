@@ -13,13 +13,8 @@ def _all_connections(connections):
 
 
 class UnitCell:
-    def __init__(
-            self,
-            a_vectors,
-            particle_positions,
-            particle_masses,
-            connections,
-    ):
+    def __init__(self,
+                 a_vectors, particle_positions, particle_masses, connections):
         self.a_vectors = [array(a) for a in a_vectors]
         self.a_matrix = np.vstack(self.a_vectors).T
         self.dim = len(a_vectors)
@@ -28,37 +23,58 @@ class UnitCell:
         self.connections = connections
         self.num_particles = len(self.particle_positions)
 
-    def num_connections(self, k):
+    def num_connections(self, i):
+        """Returns the number of connections to the ith particle in the cell
+        """
         nc = 0
         for ec_arr in self.connections:
             for ec in ec_arr:
-                if ec[0] == k:
+                if ec[0] == i:
                     nc += 1
-                if ec[1] == k:
+                if ec[1] == i:
                     nc += 1
         return nc
 
-    def connected(self, k1, k2, axis):
-        idx = sum([2**i * a for a, i in zip(reversed(axis), it.count())])
+    def connected(self, i, j, disp):
+        """Returns True if particle i in this unit cell is connected to
+        particle j in the adjacent unit cell displaced by disp
+        :param i: index of particle in this cell
+        :param j: index of particle in neighboring cell
+        :param disp: Vector of (0s and 1s) or (0s and -1s) specifying the
+        relative displacement in each dimension of the neighboring cell
+        containing j
+        """
+        idx = sum([2 ** i * a for a, i in zip(reversed(disp), it.count())])
         if idx < 0:
             idx = -idx
-            k1, k2 = k2, k1
+            i, j = j, i
         c = self.connections[idx]
         if idx == 0:
-            return (k1, k2) in c or (k2, k1) in c
+            return (i, j) in c or (j, i) in c
         else:
-            return (k1, k2) in c
+            return (i, j) in c
 
-    def connected_int(self, k1, k2):
-        return self.connected(k1, k2, axis=[0]*self.dim)
+    def connected_int(self, i, j):
+        """Returns True if particle i is connected to particle j in this cell;
+        otherwise False
+        """
+        return self.connected(i, j, disp=[0] * self.dim)
 
-    def mass(self, k):
-        return self.particle_masses[k]
+    def mass(self, i):
+        """Returns the mass of particle i in this cell
+        """
+        return self.particle_masses[i]
 
-    def displacement_mod_a(self, k1, k2):
-        return self.particle_positions[k1] - self.particle_positions[k2]
+    def displacement_mod_a(self, i, j):
+        """Returns the displacement of particle i from particle j with
+        respect to the ordered basis self.a_vectors
+        """
+        return self.particle_positions[i] - self.particle_positions[j]
 
     def displacement(self, k1, k2):
+        """Returns the absolute displacement vector of particle i from
+        particle j
+        """
         return dot(self.a_matrix, self.displacement_mod_a(k1, k2))
 
 
@@ -125,7 +141,7 @@ class UnitCell1D(UnitCell):
         self.a1 = self.a_vectors[0]
 
     def connected_x(self, k1, k2):
-        return self.connected(k1, k2, axis=1)
+        return self.connected(k1, k2, disp=1)
 
 
 class UnitCell2D(UnitCell):
@@ -202,13 +218,13 @@ class UnitCell2D(UnitCell):
         self.a2 = self.a_vectors[1]
 
     def connected_y(self, k1, k2):
-        return self.connected(k1, k2, axis=(0, 1))
+        return self.connected(k1, k2, disp=(0, 1))
 
     def connected_x(self, k1, k2):
-        return self.connected(k1, k2, axis=(1, 0))
+        return self.connected(k1, k2, disp=(1, 0))
 
     def connected_xy(self, k1, k2):
-        return self.connected(k1, k2, axis=(1, 1))
+        return self.connected(k1, k2, disp=(1, 1))
 
 
 class UnitCell3D(UnitCell):
