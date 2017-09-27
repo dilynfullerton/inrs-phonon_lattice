@@ -3,7 +3,6 @@ import numpy as np
 import qutip
 from numpy import exp, sqrt, pi, dot
 from scipy.linalg import sqrtm, eigh, inv, norm
-from BlochVector import BlochVector
 from AbsHamiltonian import AbsPhononHamiltonian
 from Lattice import Lattice
 
@@ -13,7 +12,7 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
                  *args, **kwargs):
         super(PhononLattice, self).__init__(
             unit_cell=unit_cell, N=N, *args, **kwargs)
-        self.dim_d = self.dim_space * self.M
+        self.num_modes = self.dim_space * self.M
         self._nfock = nfock
         self.c_matrix = c_matrix
         self._evals_dict = dict()
@@ -22,6 +21,7 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
             it.product(range(self.M), range(self.dim_space))
         )
         self._p0 = np.zeros(self.dim_space, dtype=np.int)
+        # self._force_adj = force_adj_only
         self._force_adj = force_adj_only
         self.A = set(self._gen_A())
         self.B = set(self._gen_B())
@@ -42,7 +42,7 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
         return self.operator_q_vectors()
 
     def _iter_v(self):
-        return range(self.dim_d)
+        return range(self.num_modes)
 
     def b_matrix(self):
         return 2*pi * inv(self.unit_cell.a_matrix.conj().T)
@@ -52,23 +52,21 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
         return [b[:, i] for i in range(self.dim_space)]
 
     def d_matrix(self, kappa1, alpha1, kappa2, alpha2):
-        if self._force_adj:
-            ucells = self.adjacent_cells(p=self._p0)
-        else:
-            ucells = self.unit_cells
-
         def _d(q):
+            if self._force_adj:
+                # ucells = self.adjacent_cells(p=self._p0)
+                ucells = self.unit_cells()
+            else:
+                ucells = self.unit_cells()
             d = 0
-            for p in ucells():
+            for p in ucells:
                 dp = self.c_matrix(lattice=self,
                                    kappa1=kappa1, alpha1=alpha1, p1=self._p0,
                                    kappa2=kappa2, alpha2=alpha2, p2=p)
                 dp *= exp(1j * 2*pi * q.dot(p))
                 d += dp
             d *= 1/sqrt(
-                self.unit_cell.mass() *
-                self.unit_cell.mass()
-            )
+                self.unit_cell.mass(kappa1) * self.unit_cell.mass(kappa2))
             return d
         return _d
 
@@ -135,27 +133,28 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
             imag_pz += zi.imag * pop
         return real_z, imag_z, real_pz, imag_pz
 
-    def _l(self, q, v):
+    def _l_inv(self, q, v):
         m0 = self.unit_cell.mass(0)
-        omega2 = self.omega2(q, v)+0j
-        return 1 / sqrt(2 * m0 * sqrt(omega2))
+        # omega2 = self.omega2(q, v)+0j
+        omega2 = 1
+        return sqrt(2 * m0 * sqrt(omega2))
 
     def _x(self, q, v):
         real_z, imag_z, real_pz, imag_pz = self._z(q, v)
-        l = self._l(q, v)
+        linv = self._l_inv(q, v)
         if q in self.A:
-            return real_z/2/l, real_pz/2/l
+            return real_z/2 * linv, real_pz/2 * linv
         elif q in self.B:
-            return real_z/l, real_pz/l
+            return real_z * linv, real_pz * linv
 
     def _y(self, q, v):
         real_z, imag_z, real_pz, imag_pz = self._z(q, v)
-        l = self._l(q, v)
+        linv = self._l_inv(q, v)
         if q in self.B:
-            return imag_z / l, imag_pz / l
+            return imag_z * linv, imag_pz * linv
 
     def _get_matrix_rep_d(self, q):
-        d_mat = np.empty(shape=(self.dim_d, self.dim_d), dtype=np.complex)
+        d_mat = np.empty(shape=(self.num_modes, self.num_modes), dtype=np.complex)
         for k1x1, i in zip(self._particles(), it.count()):
             k1, x1 = k1x1
             for k2x2, j in zip(self._particles(), it.count()):
@@ -225,8 +224,8 @@ def get_c_matrix_coulomb_interaction(g):
         def sterm(kappa_i, p_i):
             if (kappa_i, p_i.all()) == (kappa1, p1.all()):
                 return 0
-            disp = lattice.displacement(kappa1=kappa_i, alpha1=p_i,
-                                        kappa2=kappa1, alpha2=p1)
+            disp = lattice.displacement(kappa1=kappa_i, p1=p_i,
+                                        kappa2=kappa1, p2=p1)
             t1 = -g * 3 * disp[alpha1] * disp[alpha2] / norm(disp, ord=2)**5
             if alpha1 != alpha2:
                 return t1
