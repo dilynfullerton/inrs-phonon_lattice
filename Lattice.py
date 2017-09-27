@@ -7,7 +7,7 @@ from BlochVector import BlochVector
 class Lattice:
     def __init__(self, unit_cell, N, *args, **kwargs):
         self.unit_cell = unit_cell
-        self.N = N
+        self.N = np.array(N)
         self.Np = reduce(lambda a, b: a*b, self.N, 1)
         self.M = self.unit_cell.num_particles
         self.dim_space = len(self.N)
@@ -60,9 +60,10 @@ class Lattice:
             self.displacement_mod_a(kappa1=kappa1, p1=p1, kappa2=kappa2, p2=p2)
         )
 
-    def adjacent_cells(self, p):
-        for cell_disp in it.product([-1, 0, 1], repeat=self.dim_space):
-            yield p + np.array(cell_disp)
+    # TODO: fix so that opposite edge is included
+    # def adjacent_cells(self, p):
+    #     for cell_disp in it.product([-1, 0, 1], repeat=self.dim_space):
+    #         yield p + np.array(cell_disp)
 
     def q_vectors(self):
         for m in self.unit_cells():
