@@ -8,7 +8,7 @@ from BlochVector import BlochVector
 
 
 class PhononLattice:
-    def __init__(self, unit_cell, N, c_matrix, nfock=2):
+    def __init__(self, unit_cell, N, c_matrix, nfock=2, force_adj_only=True):
         self.unit_cell = unit_cell
         self.N = array(N)
         self.Np = np.product(self.N)
@@ -22,6 +22,10 @@ class PhononLattice:
         self._indices = list(
             it.product(range(self.M), range(self.dim_space))
         )
+        self._p0 = np.zeros(self.dim_space, dtype=np.int)
+        self._force_adj = force_adj_only
+        self.A = set(self._gen_A())
+        self.B = set(self._gen_B())
 
     def b_matrix(self):
         return 2*pi * inv(self.unit_cell.a_matrix.conj().T)
@@ -73,14 +77,23 @@ class PhononLattice:
         ranges = [range(n) for n in self.N]
         return (array(a) for a in it.product(*ranges))
 
+    def adjacent_cells(self, p):
+        for cell_disp in it.product([-1, 0, 1], repeat=self.dim_space):
+            yield p + np.array(cell_disp)
+
     def _particles(self):
         return it.product(range(self.M), range(self.dim_space))
 
     def d_matrix(self, k1, x1, k2, x2):
+        if self._force_adj:
+            ucells = self.adjacent_cells(p=self._p0)
+        else:
+            ucells = self.unit_cells
+
         def _d(q):
             d = 0
-            for p in self.unit_cells():
-                dp = self.c_matrix(self, k1, x1, np.zeros_like(p), k2, x2, p)
+            for p in ucells():
+                dp = self.c_matrix(self, k1, x1, self._p0, k2, x2, p)
                 dp *= exp(1j * 2*pi * q.dot(p))
                 d += dp
             d *= 1/sqrt(self.unit_cell.mass(k1) * self.unit_cell.mass(k2))
@@ -101,16 +114,19 @@ class PhononLattice:
             self._set_d_eigenvectors(q)
         return self._evals_dict[q][v]
 
+    def omega(self, q, v):
+        return sqrt(self.omega2(q, v))
+
     def q_vectors(self):
         for m in self.unit_cells():
             yield BlochVector(m, self.N)
 
-    def _A(self):
+    def _gen_A(self):
         for q in self.q_vectors():
             if q == -q:
                 yield q
 
-    def _B(self):
+    def _gen_B(self):
         b = []
         for q in self.q_vectors():
             if q != -q and -q not in b:
@@ -118,16 +134,23 @@ class PhononLattice:
                 yield q
 
     def operator_q_vectors(self):
-        return sorted(it.chain(self._B(), self._A()))
+        return it.chain(self._gen_A(), self._gen_B())
 
     def annihilation_operator(self, q, v):
-        if q in self._A():
+        if q in self.A:
             x, px = self._x(q, v)
             return 1/sqrt(2) * (x + 1j*px)
-        elif q in self._B():
+        elif q in self.B:
             x, px = self._x(q, v)
             y, py = self._y(q, v)
             return 1/2 * (x + 1j*px) + 1j/2 * (y + 1j*py)
+
+    def hamiltonian(self):
+        a = self.annihilation_operator
+        h = 0
+        for q, v in it.product(self.operator_q_vectors(), self.dim_d):
+            h += self.omega(q, v) * (a(q, v).dag() * a(q, v) + 1/2)
+        return h
 
     def _ops(self, k, x, p, op):
         dim = self.dim_space * self.M * self.Np
@@ -171,15 +194,15 @@ class PhononLattice:
     def _x(self, q, v):
         real_z, imag_z, real_pz, imag_pz = self._z(q, v)
         l = self._l(q, v)
-        if q in self._A():
+        if q in self.A:
             return real_z/2/l, real_pz/2/l
-        elif q in self._B():
+        elif q in self.B:
             return real_z/l, real_pz/l
 
     def _y(self, q, v):
         real_z, imag_z, real_pz, imag_pz = self._z(q, v)
         l = self._l(q, v)
-        if q in self._B():
+        if q in self.B:
             return imag_z / l, imag_pz / l
 
     def _get_matrix_rep_d(self, q):
