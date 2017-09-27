@@ -377,3 +377,30 @@ def base_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0):
         external_connections_xz=[],
         external_connections_xyz=[],
     )
+
+
+def zincblende3d(a, mass1, mass2, phi=0, theta=0, psi=0):
+    return UnitCell3D(
+        a1=a * array([1, 0, 0]),
+        a2=a * array([sin(phi), cos(phi), 0]),
+        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        particle_positions=[
+            [0, 0, 0], [1/2, 1/2, 0], [1/2, 0, 1/2], [0, 1/2, 1/2],
+            [1/4, 1/4, 1/4], [3/4, 3/4, 1/4], [3/4, 1/4, 3/4], [1/4, 3/4, 3/4],
+        ],
+        particle_masses=[
+            mass1, mass1, mass1, mass1,
+            mass2, mass2, mass2, mass2,
+        ],
+        internal_connections=[
+            (0, 4), (1, 4), (2, 4), (3, 4),
+            (1, 5), (2, 6), (3, 7)
+        ],
+        external_connections_x=[(5, 3), (6, 3)],
+        external_connections_y=[(7, 2), (5, 2)],
+        external_connections_z=[(6, 1), (7, 1)],
+        external_connections_xy=[(5, 0)],
+        external_connections_yz=[(7, 0)],
+        external_connections_xz=[(6, 0)],
+        external_connections_xyz=[],
+    )
