@@ -3,8 +3,7 @@ from functools import reduce
 import numpy as np
 import qutip
 from numpy import array, exp, sqrt, pi, dot, sign
-from numpy.linalg import eigh, inv, norm
-from scipy.linalg import sqrtm
+from scipy.linalg import sqrtm, eigh, inv, norm
 from BlochVector import BlochVector
 
 
@@ -193,7 +192,7 @@ class PhononLattice:
         return d_mat
 
     def _orthonormal_eigenvectors(self, dmat):
-        evals, evects = eigh(a=dmat)
+        evals, evects = eigh(a=dmat, turbo=True)
         on_evects = dot(evects, inv(sqrtm(dot(evects.conj().T, evects))))
         return evals, [on_evects[:, i] for i in range(len(evals))]
 
