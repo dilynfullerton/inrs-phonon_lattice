@@ -12,14 +12,21 @@ def _all_connections(connections):
     return sorted_connections
 
 
+class CellInformationNotProvidedError(RuntimeError):
+    pass
+
+
 class UnitCell:
-    def __init__(self,
-                 a_vectors, particle_positions, particle_masses, connections):
+    def __init__(
+            self, a_vectors, particle_positions, particle_masses, connections,
+            particle_charges=None
+    ):
         self.a_vectors = [array(a) for a in a_vectors]
         self.a_matrix = np.vstack(self.a_vectors).T
         self.dim = len(a_vectors)
         self.particle_positions = [array(pos) for pos in particle_positions]
         self.particle_masses = particle_masses
+        self.particle_charges = particle_charges
         self.connections = connections
         self.num_particles = len(self.particle_positions)
 
@@ -65,17 +72,25 @@ class UnitCell:
         """
         return self.particle_masses[i]
 
-    def displacement_mod_a(self, i, j):
+    def charge(self, i):
+        if self.particle_charges is None:
+            raise CellInformationNotProvidedError(
+                'Particle charge data was not provided in unit cell'
+                ' definition'
+            )
+
+    def particle_displacement_in_cell_mod_a(self, i, j):
         """Returns the displacement of particle i from particle j with
         respect to the ordered basis self.a_vectors
         """
         return self.particle_positions[i] - self.particle_positions[j]
 
-    def displacement(self, k1, k2):
+    def particle_displacement_distance_in_cell(self, k1, k2):
         """Returns the absolute displacement vector of particle i from
         particle j
         """
-        return dot(self.a_matrix, self.displacement_mod_a(k1, k2))
+        return np.dot(self.a_matrix,
+                      self.particle_displacement_in_cell_mod_a(k1, k2))
 
 
 class UnitCell1D(UnitCell):
