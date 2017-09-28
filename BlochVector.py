@@ -10,19 +10,19 @@ class BlochVector:
         :param q: an interable of integers
         """
         self.q = array(q, dtype=np.int)
-        self.N = N
+        self.N = array(N, dtype=np.int)
 
     def __eq__(self, other):
         if not isinstance(other, BlochVector):
             return False
         else:
             return (
-                self._canonical_int_list() == other._canonical_int_list() and
+                self.canonical_form_mod_N() == other.canonical_form_mod_N() and
                 self.N.all() == other.N.all()
             )
 
     def __hash__(self):
-        return int(self._canonical_int_list()[0])
+        return int(self.canonical_form_mod_N()[0])
 
     def __cmp__(self, other):
         return self == other
@@ -52,15 +52,16 @@ class BlochVector:
         return str(self.canonical_form())
 
     def __lt__(self, other):
-        return self._canonical_int_list() < other._canonical_int_list()
+        c_self = self.canonical_form_mod_N()
+        c_other = other.canonical_form_mod_N()
+        return c_self < c_other
 
-    def _canonical_int_list(self):
-        return [qi % Ni for qi, Ni in zip(self.q, self.N)]
+    def canonical_form_mod_N(self):
+        q_canon = np.mod(self.q, self.N, dtype=np.int)
+        return list(q_canon)
 
     def canonical_form(self):
-        return array(
-            [qi/Ni for qi, Ni in zip(self._canonical_int_list(), self.N)]
-        )
+        return self.canonical_form_mod_N() / self.N
 
     def dot(self, other):
         assert len(other) == len(self)
