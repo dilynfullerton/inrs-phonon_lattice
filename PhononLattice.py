@@ -20,7 +20,6 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
         self._indices = list(
             it.product(range(self.M), range(self.dim_space))
         )
-        self._p0 = np.zeros(self.dim_space, dtype=np.int)
         # self._force_adj = force_adj_only
         self._force_adj = force_adj_only
         self.A = set(self._gen_A())
@@ -53,15 +52,12 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
 
     def d_matrix(self, kappa1, alpha1, kappa2, alpha2):
         def _d(q):
-            if self._force_adj:
-                # ucells = self.adjacent_cells(p=self._p0)
-                ucells = self.unit_cells()
-            else:
-                ucells = self.unit_cells()
             d = 0
-            for p in ucells:
+            for p in self.unit_cells():
+                if self._force_adj and not self.are_adjacent(p, self.p0):
+                    continue
                 dp = self.c_matrix(lattice=self,
-                                   kappa1=kappa1, alpha1=alpha1, p1=self._p0,
+                                   kappa1=kappa1, alpha1=alpha1, p1=self.p0,
                                    kappa2=kappa2, alpha2=alpha2, p2=p)
                 dp *= exp(1j * 2*pi * q.dot(p))
                 d += dp
@@ -224,8 +220,8 @@ def get_c_matrix_coulomb_interaction(g):
         def sterm(kappa_i, p_i):
             if (kappa_i, p_i.all()) == (kappa1, p1.all()):
                 return 0
-            disp = lattice.displacement(kappa1=kappa_i, p1=p_i,
-                                        kappa2=kappa1, p2=p1)
+            disp = lattice.periodic_displacement_distance(
+                kappa1=kappa_i, p1=p_i, kappa2=kappa1, p2=p1)
             t1 = -g * 3 * disp[alpha1] * disp[alpha2] / norm(disp, ord=2)**5
             if alpha1 != alpha2:
                 return t1
