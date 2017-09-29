@@ -2,6 +2,7 @@ from functools import reduce
 import itertools as it
 import numpy as np
 from BlochVector import BlochVector
+from PeriodicPosition import PeriodicPosition
 
 
 class Lattice:
@@ -11,7 +12,7 @@ class Lattice:
         self.Np = reduce(lambda a, b: a*b, self.N, 1)
         self.M = self.unit_cell.num_particles
         self.dim_space = len(self.N)
-        self.p0 = np.zeros_like(self.N)
+        self.p0 = PeriodicPosition(np.zeros_like(self.N), self.N)
 
     def Np(self):
         """The number of unit cells in the supercell
@@ -23,10 +24,11 @@ class Lattice:
         specifying the periodic cell displacement from p0 = [0, 0, 0, ...].
         """
         ranges = [range(n) for n in self.N]
-        return (np.array(a) for a in it.product(*ranges))
+        return (PeriodicPosition(a, self.N) for a in it.product(*ranges))
 
     def are_adjacent(self, p1, p2):
-        periodic_disp = self.periodic_displacement_mod_a(p1, p2)
+        periodic_disp = PeriodicPosition(
+            p1 - p2, self.N).canonical_displacement()
         return max(periodic_disp) <= 1 and min(periodic_disp) >= -1
 
     def adjacent_cells(self, p):
@@ -42,7 +44,7 @@ class Lattice:
         :param kappa2: Index of particle 2 in unit cell
         :param p2: Position index (nx, ny) of unit cell 2
         """
-        disp = self.periodic_displacement_mod_a(p2, p1)
+        disp = p1 - p2
         is_neg_neighbor = reduce(
             lambda a, b: a and b, map(lambda x: x == 0 or x == -1, disp), True)
         is_pos_neighbor = reduce(
@@ -54,28 +56,37 @@ class Lattice:
         else:
             return False
 
-    def periodic_displacement_mod_a(self, p1, p2):
+    def periodic_cell_displacement_mod_a(self, p1, p2):
         """Returns the unique vector dp, such that
                 p2_i + dp_i = p1_i (mod N_i), and
                 -1/2 < dp_i/N_i <= 1/2
         """
-        disp_abs = p1 - p2
-        disp_rel = np.mod(disp_abs, self.N)
-        for di, i in zip(disp_rel, it.count()):
-            if di > self.N[i] / 2:
-                disp_rel[i] = di - self.N[i]
+        # disp_abs = p1 - p2
+        # disp_rel = np.mod(disp_abs, self.N)
+        # for di, i in zip(disp_rel, it.count()):
+        #     if di > self.N[i] / 2:
+        #         disp_rel[i] = di - self.N[i]
+        disp_rel = p1 - p2
         return disp_rel
 
-    def periodic_particle_displacement_mod_a(self, kappa1, p1, kappa2, p2):
+    def particles_equal(self, kappa1, p1, kappa2, p2):
+        p1 = PeriodicPosition(p1, self.N)
+        p2 = PeriodicPosition(p2, self.N)
+        return kappa1 == kappa2 and p1 == p2
+
+    def periodic_displacement_mod_a(self, kappa1, p1, kappa2, p2):
         kdisp = self.unit_cell.particle_displacement_in_cell_mod_a(
             i=kappa1, j=kappa2)
-        return self.periodic_displacement_mod_a(p1=p1, p2=p2-kdisp)
+        disp = p1 - p2 + kdisp
+        return disp
+        # return self.periodic_displacement_mod_a(p1=p1, p2=p2-kdisp)
 
     def periodic_displacement_distance(self, kappa1, p1, kappa2, p2):
+        disp_mod_a = self.periodic_displacement_mod_a(
+            kappa1=kappa1, p1=p1, kappa2=kappa2, p2=p2
+        )
         return np.dot(
-            self.unit_cell.a_matrix,
-            self.periodic_particle_displacement_mod_a(
-                kappa1=kappa1, p1=p1, kappa2=kappa2, p2=p2)
+            self.unit_cell.a_matrix, disp_mod_a.canonical_displacement()
         )
 
     def q_vectors(self):

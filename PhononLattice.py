@@ -1,4 +1,5 @@
 import itertools as it
+import operator
 import numpy as np
 import qutip
 from numpy import exp, sqrt, pi, dot
@@ -96,11 +97,13 @@ class PhononLattice(Lattice, AbsPhononHamiltonian):
         return it.chain(self._gen_A(), self._gen_B())
 
     def _ops(self, kappa, alpha, p, op):
-        dim = self.dim_space * self.M * self.Np
-        xop = [qutip.qeye(self._nfock)] * dim
-        idx = alpha + self.dim_space * kappa + self.dim_space * self.M * p[0]
-        for i in range(self.dim_space - 1):
-            idx += self.dim_space * self.M * self.N[i] * p[i+1]
+        dimx = self.dim_space * self.M * self.Np
+        xop = [qutip.qeye(self._nfock)] * dimx
+        dims = it.chain([self.dim_space, self.M], self.N)
+        coefs = it.chain([alpha, kappa], p)
+        idx = 0
+        for xi, ni in zip(coefs, it.accumulate(dims, func=operator.mul)):
+            idx += xi * ni
         xop.insert(idx, op)
         xop.pop(idx+1)
         return qutip.tensor(xop)
@@ -218,7 +221,7 @@ def get_c_matrix_coulomb_interaction(g):
             return 0  # Only interact with neighbors
 
         def sterm(kappa_i, p_i):
-            if (kappa_i, p_i.all()) == (kappa1, p1.all()):
+            if (kappa1, p1) == (kappa_i, p_i):
                 return 0
             disp = lattice.periodic_displacement_distance(
                 kappa1=kappa_i, p1=p_i, kappa2=kappa1, p2=p1)
@@ -236,3 +239,35 @@ def get_c_matrix_coulomb_interaction(g):
         else:
             return -sterm(kappa2, p2)
     return c_matrix
+
+
+def _taudisp(lattice, alpha, delta_ind):
+    k1, p1, k2, p2 = delta_ind
+    disp = lattice.periodic_displacement_distance(k1, p1, k2, p2)
+    return disp.canonical_displacement()[alpha]
+
+
+def _delta(lattice, delta_ind):
+    kappa1, p1, kappa2, p2 = delta_ind
+    if (kappa1, p1) == (kappa2, p2):
+        return 0
+    else:
+        dtau = lattice.periodic_displacement_distance(kappa1, p1, kappa2, p2)
+        return 1/norm(dtau, ord=2)
+
+def _d_delta(lattice, d_ind, delta_ind):
+    k, alpha, p = d_ind
+    k1, p1, k2, p2 = delta_ind
+    if (k, p) != (k1, p1) and (k, p) != (k2, p2):
+        return 0
+    taudisp = _taudisp(lattice, alpha, delta_ind)
+    delta = _delta(lattice, delta_ind)
+    d = -taudisp * delta**3
+    if (k, p) == (k1, p1):
+        return d
+    else:
+        return -d
+
+
+def get_c_matrix_coulomb_interaction2(k):
+
