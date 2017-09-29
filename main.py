@@ -10,7 +10,7 @@ K = 1  # Spring constant mass * omega0**2
 M1 = 1
 M2 = 10
 NX = 40  # Number of particles along line
-NY = 40
+NY = 2
 NZ = 2
 
 
@@ -61,7 +61,7 @@ for lat in [lat_fcc, lat_zb]:
     for q in sorted(lat.operator_q_vectors()):
         if q[0] == 0:
             continue
-        if q[1] != q[0] or q[2] != 0:
+        if q[1] != 0 or q[2] != 0:
             continue
         print(q)
         xdat.append(q[0])
