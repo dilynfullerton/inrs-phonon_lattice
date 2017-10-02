@@ -2,6 +2,7 @@ import itertools as it
 
 import numpy as np
 from numpy import array, dot, cos, sin
+from scipy.linalg import det
 
 
 def _all_connections(connections):
@@ -100,6 +101,7 @@ class UnitCell1D(UnitCell):
             particle_masses,
             internal_connections=list(),
             external_connections_x=list(),
+            *args, **kwargs
     ):
         """Creates a 1D unit cell with the given edge vector a1,
         particle positions, and particle connections.
@@ -151,7 +153,8 @@ class UnitCell1D(UnitCell):
             connections=[
                 internal_connections,  # 0 = x
                 external_connections_x,  # 1
-            ]
+            ],
+            *args, **kwargs
         )
         self.a1 = self.a_vectors[0]
 
@@ -168,6 +171,7 @@ class UnitCell2D(UnitCell):
             external_connections_x=list(),
             external_connections_y=list(),
             external_connections_xy=list(),
+            *args, **kwargs
     ):
         """Creates a 2D unit cell with the given edge vectors a1 and a2,
         particle positions, and particle connections.
@@ -227,7 +231,8 @@ class UnitCell2D(UnitCell):
                 external_connections_y,  # 01
                 external_connections_x,  # 10
                 external_connections_xy,  # 11
-            ]
+            ],
+            *args, **kwargs
         )
         self.a1 = self.a_vectors[0]
         self.a2 = self.a_vectors[1]
@@ -254,7 +259,8 @@ class UnitCell3D(UnitCell):
             external_connections_xy=list(),
             external_connections_xz=list(),
             external_connections_yz=list(),
-            external_connections_xyz=list()
+            external_connections_xyz=list(),
+            *args, **kwargs
     ):
         """Creates a 3D unit cell with the given edge vectors a1, a2, adn a3,
         particle positions, and particle connections.
@@ -325,7 +331,9 @@ class UnitCell3D(UnitCell):
                 external_connections_xz,   # 101
                 external_connections_xy,   # 110
                 external_connections_xyz,  # 111
-            ]
+            ],
+            *args,
+            **kwargs
         )
         self.a1 = self.a_vectors[0]
         self.a2 = self.a_vectors[1]
@@ -333,27 +341,82 @@ class UnitCell3D(UnitCell):
 
 
 # Functions for easy generation
-def simple_cubic3d(a, mass, phi=0, theta=0, psi=0):
-    return UnitCell3D(
-        a1=a * array([1, 0, 0]),
-        a2=a * array([sin(phi), cos(phi), 0]),
-        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
-        particle_positions=[[0, 0, 0]],
-        particle_masses=[mass],
-        internal_connections=[],
-        external_connections_x=[(0, 0)],
-        external_connections_y=[(0, 0)],
-        external_connections_z=[(0, 0)]
+def _unit_a_matrix(dim, angles):
+    amat = np.eye(dim)
+    for theta_ij, ij in zip(angles, it.combinations(range(dim), r=2)):
+        i, j = ij
+        tij = np.eye(dim)
+        tij[i, j] = np.tan(theta_ij)
+        amat = np.dot(tij, amat)
+    return amat
+
+
+def _unit_a_vectors(dim, angles):
+    amat = _unit_a_matrix(dim, angles)
+    return [amat[:, i] for i in range(dim)]
+
+
+def a_from_density(density, total_mass, unit_amat):
+    unit_vol = det(unit_amat)
+    a3 = total_mass / density / unit_vol
+    a = a3**(1/3)
+    return a
+
+
+def _make_unit_cell(a, cell_type, angles, dim, masses, a_is_density=False,
+                    *args, **kwargs):
+    amat = _unit_a_matrix(dim, angles)
+    if a_is_density:
+        a = a_from_density(density=a, total_mass=sum(masses), unit_amat=amat)
+    a_vectors = [a * amat[:, i] for i in range(len(dim))]
+    positions, connections = cell_type
+    return UnitCell(
+        a_vectors=a_vectors,
+        particle_positions=positions,
+        particle_masses=masses,
+        connections=connections,
+        *args, **kwargs
     )
 
 
-def body_centered_cubic3d(a, mass_corner, mass_center, phi=0, theta=0, psi=0):
+def simple_cubic3d(a, mass, phi=0, theta=0, psi=0, a_is_density=False,
+                   *args, **kwargs):
+    particle_masses = [mass]
+    unit_vectors = _unit_a_vectors(dim=3, angles=[phi, theta, psi])
+    if a_is_density:
+        a = a_from_density(
+            density=a, total_mass=sum(particle_masses),
+            unit_amat=np.column_stack(unit_vectors)
+        )
     return UnitCell3D(
-        a1=a * array([1, 0, 0]),
-        a2=a * array([sin(phi), cos(phi), 0]),
-        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        a1=a * unit_vectors[0],
+        a2=a * unit_vectors[1],
+        a3=a * unit_vectors[2],
+        particle_positions=[[0, 0, 0]],
+        particle_masses=particle_masses,
+        internal_connections=[],
+        external_connections_x=[(0, 0)],
+        external_connections_y=[(0, 0)],
+        external_connections_z=[(0, 0)],
+        *args, **kwargs
+    )
+
+
+def body_centered_cubic3d(a, mass_corner, mass_center, phi=0, theta=0, psi=0,
+                          a_is_density=False, *args, **kwargs):
+    particle_masses = [mass_corner, mass_center]
+    unit_vectors = _unit_a_vectors(dim=3, angles=[phi, theta, psi])
+    if a_is_density:
+        a = a_from_density(
+            density=a, total_mass=sum(particle_masses),
+            unit_amat=np.column_stack(unit_vectors)
+        )
+    return UnitCell3D(
+        a1=a * unit_vectors[0],
+        a2=a * unit_vectors[1],
+        a3=a * unit_vectors[2],
+        particle_masses=particle_masses,
         particle_positions=[[0, 0, 0], [1/2, 1/2, 1/2]],
-        particle_masses=[mass_corner, mass_center],
         internal_connections=[(0, 1)],
         external_connections_x=[(0, 0), (1, 0)],
         external_connections_y=[(0, 0), (1, 0)],
@@ -362,21 +425,27 @@ def body_centered_cubic3d(a, mass_corner, mass_center, phi=0, theta=0, psi=0):
         external_connections_yz=[(1, 0)],
         external_connections_xz=[(1, 0)],
         external_connections_xyz=[(1, 0)],
+        *args, **kwargs
     )
 
 
-def face_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0):
+def face_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0,
+                          a_is_density=False, *args, **kwargs):
+    particle_masses = [mass_corner, mass_face, mass_face, mass_face]
+    unit_vectors = _unit_a_vectors(dim=3, angles=[phi, theta, psi])
+    if a_is_density:
+        a = a_from_density(
+            density=a, total_mass=sum(particle_masses),
+            unit_amat=np.column_stack(unit_vectors)
+        )
     return UnitCell3D(
-        a1=a * array([1, 0, 0]),
-        a2=a * array([sin(phi), cos(phi), 0]),
-        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        a1=a * unit_vectors[0],
+        a2=a * unit_vectors[1],
+        a3=a * unit_vectors[2],
+        particle_masses=particle_masses,
         particle_positions=[
             [0, 0, 0],  # corner
             [0, 1/2, 1/2], [1/2, 0, 1/2], [1/2, 1/2, 0],  # faces
-        ],
-        particle_masses=[
-            mass_corner,
-            mass_face, mass_face, mass_face
         ],
         internal_connections=[(0, 1), (0, 2), (0, 3)],
         external_connections_x=[(0, 0), (2, 0), (3, 0)],
@@ -386,19 +455,28 @@ def face_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0):
         external_connections_yz=[(1, 0), (1, 0)],
         external_connections_xz=[(1, 0), (2, 0)],
         external_connections_xyz=[],
+        *args, **kwargs,
     )
 
 
-def base_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0):
+def base_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0,
+                          a_is_density=False, *args, **kwargs):
+    particle_masses = [mass_corner, mass_face]
+    unit_vectors = _unit_a_vectors(dim=3, angles=[phi, theta, psi])
+    if a_is_density:
+        a = a_from_density(
+            density=a, total_mass=sum(particle_masses),
+            unit_amat=np.column_stack(unit_vectors)
+        )
     return UnitCell3D(
-        a1=a * array([1, 0, 0]),
-        a2=a * array([sin(phi), cos(phi), 0]),
-        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        a1=a * unit_vectors[0],
+        a2=a * unit_vectors[1],
+        a3=a * unit_vectors[2],
+        particle_masses=particle_masses,
         particle_positions=[
             [0, 0, 0],  # corner
             [1/2, 1/2, 0],  # face
         ],
-        particle_masses=[mass_corner, mass_face],
         internal_connections=[(0, 1)],
         external_connections_x=[(0, 0), (1, 0)],
         external_connections_y=[(0, 0), (1, 0)],
@@ -407,21 +485,29 @@ def base_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0):
         external_connections_yz=[],
         external_connections_xz=[],
         external_connections_xyz=[],
+        *args, **kwargs,
     )
 
 
-def zincblende3d(a, mass1, mass2, phi=0, theta=0, psi=0):
+def zincblende3d(a, mass1, mass2, phi=0, theta=0, psi=0, a_is_density=False,
+                 *args, **kwargs):
+    particle_masses = [
+        mass1, mass1, mass1, mass1, mass2, mass2, mass2, mass2
+    ]
+    unit_vectors = _unit_a_vectors(dim=3, angles=[phi, theta, psi])
+    if a_is_density:
+        a = a_from_density(
+            density=a, total_mass=sum(particle_masses),
+            unit_amat=np.column_stack(unit_vectors)
+        )
     return UnitCell3D(
-        a1=a * array([1, 0, 0]),
-        a2=a * array([sin(phi), cos(phi), 0]),
-        a3=a * array([sin(theta)*cos(psi), sin(theta)*sin(psi), cos(theta)]),
+        a1=a * unit_vectors[0],
+        a2=a * unit_vectors[1],
+        a3=a * unit_vectors[2],
+        particle_masses=particle_masses,
         particle_positions=[
             [0, 0, 0], [1/2, 1/2, 0], [1/2, 0, 1/2], [0, 1/2, 1/2],
             [1/4, 1/4, 1/4], [3/4, 3/4, 1/4], [3/4, 1/4, 3/4], [1/4, 3/4, 3/4],
-        ],
-        particle_masses=[
-            mass1, mass1, mass1, mass1,
-            mass2, mass2, mass2, mass2,
         ],
         internal_connections=[
             (0, 4), (1, 4), (2, 4), (3, 4),
@@ -434,4 +520,5 @@ def zincblende3d(a, mass1, mass2, phi=0, theta=0, psi=0):
         external_connections_yz=[(7, 0)],
         external_connections_xz=[(6, 0)],
         external_connections_xyz=[],
+        *args, **kwargs,
     )
