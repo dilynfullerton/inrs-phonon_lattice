@@ -16,7 +16,7 @@ def periodic_displacement_mod_a(p1, p2, N):
 
 
 class PeriodicPosition:
-    def __init__(self, p, N):
+    def __init__(self, p, N=None):
         """Creates the discrete periodic position
                 p = p1 * a1 + p2 * a2 + ...
         represented by a list
@@ -25,14 +25,20 @@ class PeriodicPosition:
                 p1 == p2  <==>  p1 mod N == p2 mod N,
         namely each component p[j] of p is periodic with period N[j]
         """
-        self.N = np.array(N, dtype=np.int)
-        self.p = np.array(p)
+        if isinstance(p, PeriodicPosition):
+            self.p = p.p
+            self.N = p.N
+        else:
+            self.N = np.array(N, dtype=np.int)
+            self.p = np.array(p)
         self.p0 = np.zeros_like(self.N)
 
     def __eq__(self, other):
         if not isinstance(other, PeriodicPosition):
             other = PeriodicPosition(other, self.N)
-        return self._canonical_form_eq() == other._canonical_form_eq()
+            return self == other
+        else:
+            return self._canonical_form_eq() == other._canonical_form_eq()
 
     def __hash__(self):
         return hash(self._canonical_form_eq()[0])
@@ -67,7 +73,7 @@ class PeriodicPosition:
         return self * other
 
     def __iter__(self):
-        return iter(self.p)
+        return iter(self.displacement())
 
     def __len__(self):
         return len(self.p)
@@ -92,17 +98,18 @@ class PeriodicPosition:
         """
         return list(np.mod(self.p, self.N))
 
-    def canonical_position(self):
+    def position(self):
         """Returns the smallest positive representation of p, i.e. that in
         which all p_i satisfy 0 <= p_i < N_i
         """
         return np.mod(self.p, self.N)
 
-    def canonical_displacement(self):
+    def displacement(self):
         return periodic_displacement_mod_a(p1=self.p, p2=self.p0, N=self.N)
 
     def dot(self, other):
-        assert len(other) == len(self)
-        d = sum(map(lambda a: a[0]*a[1], zip(self.canonical_position(), other)),
-                0)
+        assert len(self) == len(other)
+        d = 0
+        for x, y in zip(self, other):
+            d += x * y
         return d

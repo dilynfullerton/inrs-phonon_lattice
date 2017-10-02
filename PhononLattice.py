@@ -225,7 +225,7 @@ def get_c_matrix_coulomb_interaction(g):
                 return 0
             disp = lattice.periodic_displacement_distance(
                 kappa1=kappa_i, p1=p_i, kappa2=kappa1, p2=p1
-            ).canonical_displacement()
+            ).displacement()
             t1 = -g * 3 * disp[alpha1] * disp[alpha2] / norm(disp, ord=2)**5
             if alpha1 != alpha2:
                 return t1
@@ -245,7 +245,7 @@ def get_c_matrix_coulomb_interaction(g):
 def _taudisp(lattice, tau_ind):
     alpha, k1, p1, k2, p2 = tau_ind
     disp = lattice.periodic_displacement_distance(k1, p1, k2, p2)
-    return disp.canonical_displacement()[alpha]
+    return disp.displacement()[alpha]
 
 
 def _delta(lattice, delta_ind):

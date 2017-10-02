@@ -1,7 +1,7 @@
 import itertools as it
 
 import numpy as np
-from numpy import array, dot, cos, sin
+from numpy import array
 from scipy.linalg import det
 
 
@@ -52,8 +52,8 @@ class UnitCell:
         relative displacement in each dimension of the neighboring cell
         containing j
         """
-        disp = disp.canonical_displacement()
-        idx = sum([2 ** i * a for a, i in zip(reversed(disp), it.count())])
+        disp = disp.position()
+        idx = sum([2**i * a for a, i in zip(reversed(disp), it.count())])
         if idx < 0:
             idx = -idx
             i, j = j, i
@@ -347,6 +347,8 @@ class UnitCell3D(UnitCell):
 def _unit_a_matrix(dim, angles):
     amat = np.eye(dim)
     for theta_ij, ij in zip(angles, it.combinations(range(dim), r=2)):
+        if theta_ij % np.pi == 0:
+            continue
         i, j = ij
         tij = np.eye(dim)
         tij[i, j] = np.tan(theta_ij)

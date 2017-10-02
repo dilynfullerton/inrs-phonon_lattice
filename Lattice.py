@@ -27,7 +27,7 @@ class Lattice:
         return (PeriodicPosition(a, self.N) for a in it.product(*ranges))
 
     def are_adjacent(self, p1, p2):
-        periodic_disp = (p1 - p2).canonical_displacement()
+        periodic_disp = (p1 - p2).displacement()
         return max(periodic_disp) <= 1 and min(periodic_disp) >= -1
 
     def adjacent_cells(self, p):
@@ -55,19 +55,6 @@ class Lattice:
         else:
             return False
 
-    def periodic_cell_displacement_mod_a(self, p1, p2):
-        """Returns the unique vector dp, such that
-                p2_i + dp_i = p1_i (mod N_i), and
-                -1/2 < dp_i/N_i <= 1/2
-        """
-        # disp_abs = p1 - p2
-        # disp_rel = np.mod(disp_abs, self.N)
-        # for di, i in zip(disp_rel, it.count()):
-        #     if di > self.N[i] / 2:
-        #         disp_rel[i] = di - self.N[i]
-        disp_rel = p1 - p2
-        return disp_rel
-
     def particles_equal(self, kappa1, p1, kappa2, p2):
         return kappa1 == kappa2 and p1 == p2
 
@@ -82,13 +69,13 @@ class Lattice:
             kappa1=kappa1, p1=p1, kappa2=kappa2, p2=p2
         )
         disp = np.dot(
-            self.unit_cell.a_matrix, disp_mod_a.canonical_displacement()
+            self.unit_cell.a_matrix, disp_mod_a.displacement()
         )
         return PeriodicPosition(disp, N=self.N)
 
     def q_vectors(self):
         for m in self.unit_cells():
-            yield BlochVector(m.p, self.N)
+            yield BlochVector(m)
 
     def _particles(self):
         return it.product(range(self.M), range(self.dim_space))

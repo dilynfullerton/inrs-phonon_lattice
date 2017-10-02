@@ -60,7 +60,7 @@ ydats = [[] for v in range(lat.num_modes)]
 labs = [
     '$\omega_{q, ' + '{}'.format(v) + '}^2$' for v in range(lat.num_modes)]
 for q in sorted(lat.operator_q_vectors()):
-    qdisp = q.canonical_position()
+    qdisp = q.position()
     if qdisp[0] == 0:
         continue
     if qdisp[1] != 0 or qdisp[2] != 0:
