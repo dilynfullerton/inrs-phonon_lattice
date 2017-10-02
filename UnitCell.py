@@ -52,6 +52,7 @@ class UnitCell:
         relative displacement in each dimension of the neighboring cell
         containing j
         """
+        disp = disp.canonical_displacement()
         idx = sum([2 ** i * a for a, i in zip(reversed(disp), it.count())])
         if idx < 0:
             idx = -idx
@@ -79,6 +80,8 @@ class UnitCell:
                 'Particle charge data was not provided in unit cell'
                 ' definition'
             )
+        else:
+            return self.particle_charges[i]
 
     def particle_displacement_in_cell_mod_a(self, i, j):
         """Returns the displacement of particle i from particle j with
@@ -489,10 +492,13 @@ def base_centered_cubic3d(a, mass_corner, mass_face, phi=0, theta=0, psi=0,
     )
 
 
-def zincblende3d(a, mass1, mass2, phi=0, theta=0, psi=0, a_is_density=False,
-                 *args, **kwargs):
+def zincblende3d(a, mass1, mass2, charge1, charge2, phi=0, theta=0, psi=0,
+                 a_is_density=False, *args, **kwargs):
     particle_masses = [
         mass1, mass1, mass1, mass1, mass2, mass2, mass2, mass2
+    ]
+    particle_charges = [
+        charge1, charge1, charge1, charge1, charge2, charge2, charge2, charge2
     ]
     unit_vectors = _unit_a_vectors(dim=3, angles=[phi, theta, psi])
     if a_is_density:
@@ -505,6 +511,7 @@ def zincblende3d(a, mass1, mass2, phi=0, theta=0, psi=0, a_is_density=False,
         a2=a * unit_vectors[1],
         a3=a * unit_vectors[2],
         particle_masses=particle_masses,
+        particle_charges=particle_charges,
         particle_positions=[
             [0, 0, 0], [1/2, 1/2, 0], [1/2, 0, 1/2], [0, 1/2, 1/2],
             [1/4, 1/4, 1/4], [3/4, 3/4, 1/4], [3/4, 1/4, 3/4], [1/4, 3/4, 3/4],
