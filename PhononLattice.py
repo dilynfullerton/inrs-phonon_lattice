@@ -241,8 +241,8 @@ def get_c_matrix_coulomb_interaction(g):
     return c_matrix
 
 
-def _taudisp(lattice, alpha, delta_ind):
-    k1, p1, k2, p2 = delta_ind
+def _taudisp(lattice, tau_ind):
+    alpha, k1, p1, k2, p2 = tau_ind
     disp = lattice.periodic_displacement_distance(k1, p1, k2, p2)
     return disp.canonical_displacement()[alpha]
 
@@ -255,19 +255,72 @@ def _delta(lattice, delta_ind):
         dtau = lattice.periodic_displacement_distance(kappa1, p1, kappa2, p2)
         return 1/norm(dtau, ord=2)
 
+
 def _d_delta(lattice, d_ind, delta_ind):
     k, alpha, p = d_ind
     k1, p1, k2, p2 = delta_ind
     if (k, p) != (k1, p1) and (k, p) != (k2, p2):
         return 0
-    taudisp = _taudisp(lattice, alpha, delta_ind)
+    taudisp = _taudisp(lattice, [alpha, k1, p1, k2, p2])
     delta = _delta(lattice, delta_ind)
     d = -taudisp * delta**3
     if (k, p) == (k1, p1):
         return d
-    else:
+    elif (k, p) == (k2, p2):
         return -d
+    else:
+        return 0
+
+
+def _d_taudisp(lattice, d_ind, tau_ind):
+    kd, alphad, pd = d_ind
+    alpha, k1, p1, k2, p2 = tau_ind
+    if (kd, alphad, pd) == (k1, alpha, p1):
+        return 1
+    elif (kd, alphad, pd) == (k2, alpha, p2):
+        return -1
+    else:
+        return 0
+
+
+def _d_d_delta(lattice, d_ind_a, d_ind_b, delta_ind):
+    k_a, alpha_a, p_a = d_ind_a
+    k1, p1, k2, p2 = delta_ind
+    if (k_a, p_a) != (k1, p1) and (k_a, p_a) != (k2, p2):
+        return 0
+    delta = _delta(lattice, delta_ind=delta_ind)
+    ddelta = _d_delta(lattice, d_ind=d_ind_b, delta_ind=delta_ind)
+    tau_ind = [alpha_a, k1, p1, k2, p2]
+    taudisp = _taudisp(lattice, tau_ind=tau_ind)
+    dtau = -_d_taudisp(lattice, d_ind=d_ind_b, tau_ind=tau_ind)
+    dddelta = -dtau * delta**3 - 3 * taudisp * ddelta * delta**2
+    if (k_a, p_a) == (k1, p1):
+        return dddelta
+    elif (k_a, p_a) == (k2, p2):
+        return -dddelta
+    else:
+        return 0
 
 
 def get_c_matrix_coulomb_interaction2(k):
+    def filterfn(iterable):
+        return filter(lambda x: x[0] <= x[1], iterable)
 
+    def cmat(lattice, kappa1, alpha1, p1, kappa2, alpha2, p2):
+        charge = lattice.unit_cell.charge
+        c = 0
+        for kpair, ppair in it.product(
+                filterfn(it.product(range(lattice.M), repeat=2)),
+                filterfn(it.product(lattice.unit_cells(), repeat=2)),
+        ):
+            ka, kb = kpair
+            pa, pb = ppair
+            c += k * charge(ka) * charge(kb) * _d_d_delta(
+                lattice,
+                d_ind_a=[kappa1, alpha1, p1],
+                d_ind_b=[kappa2, alpha2, p2],
+                delta_ind=[ka, pa, kb, pb]
+            )
+        return c
+
+    return cmat
