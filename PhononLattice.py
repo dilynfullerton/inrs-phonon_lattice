@@ -224,7 +224,8 @@ def get_c_matrix_coulomb_interaction(g):
             if (kappa1, p1) == (kappa_i, p_i):
                 return 0
             disp = lattice.periodic_displacement_distance(
-                kappa1=kappa_i, p1=p_i, kappa2=kappa1, p2=p1)
+                kappa1=kappa_i, p1=p_i, kappa2=kappa1, p2=p1
+            ).canonical_displacement()
             t1 = -g * 3 * disp[alpha1] * disp[alpha2] / norm(disp, ord=2)**5
             if alpha1 != alpha2:
                 return t1
