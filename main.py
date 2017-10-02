@@ -3,78 +3,68 @@ from PhononLattice import *
 from UnitCell import *
 from PhononLattice import get_c_matrix_coulomb_interaction
 
-# Simple 1D Harmonic oscillator lattice
-# ----------------------------------------------------------------
+UNIT_LENGTH_M = 1
+UNIT_MASS_KG = 1
+UNIT_CURRENT_A = 1
+UNIT_TIME_S = 1
 
-K = 1  # Spring constant mass * omega0**2
-M1 = 1
-M2 = 10
+UNIT_LENGTH_CM = UNIT_LENGTH_M / 100
+UNIT_MASS_G = 1/1000 * UNIT_MASS_KG
+UNIT_MASS_AMU = 1.6605e-27 * UNIT_MASS_KG
+UNIT_CHARGE_C = UNIT_TIME_S * UNIT_CURRENT_A
+UNIT_CHARGE_E = 1.602e-19 * UNIT_CHARGE_C
+UNIT_CAPACITANCE_F = UNIT_TIME_S**4 * UNIT_CURRENT_A**2 / UNIT_LENGTH_M**2 / UNIT_MASS_KG
+
+MASS_Cd = 112.414 * UNIT_MASS_AMU
+MASS_S = 32.06 * UNIT_MASS_AMU
+DENSITY_CdS = 4.826 * UNIT_MASS_G / UNIT_LENGTH_CM**3
+uc_CdS = zincblende3d(
+    a=DENSITY_CdS,
+    a_is_density=True,
+    mass1=MASS_Cd,
+    mass2=MASS_S,
+    phi=0, psi=0, theta=0,
+    particle_charges=[+2 * UNIT_CHARGE_E, -2 * UNIT_CHARGE_E]
+)
+
 NX = 40  # Number of particles along line
 NY = 2
 NZ = 2
 
-
-# Construct unit cell, a simple line with two masses
-fcc = face_centered_cubic3d(
-    a=1, mass_corner=M1, mass_face=M2, phi=0, psi=0, theta=0)
-bcc = body_centered_cubic3d(
-    a=1, mass_corner=M1, mass_center=M2, phi=0, psi=0, theta=0)
-sc = simple_cubic3d(
-    a=1, mass=M1, phi=0, psi=0, theta=0)
-zb = zincblende3d(
-    a=1, mass1=M1, mass2=M2, phi=0, psi=0, theta=0)
-
-# # Verify number of connections
-# print('num_connections(k={})= {}'.format(0, box2d.num_connections(0)))
-# print('num_connections(k={})= {}'.format(1, box2d.num_connections(1)))
-
-# Construct lattice
-lat_fcc = PhononLattice3D(
-    unit_cell=fcc, N_x=NX, N_y=NY, N_z=NZ,
-    c_matrix=get_c_matrix_coulomb_interaction(g=-K),
-)
-lat_bcc = PhononLattice3D(
-    unit_cell=bcc, N_x=NX, N_y=NY, N_z=NZ,
-    c_matrix=get_c_matrix_coulomb_interaction(g=-K),
-)
-lat_sc = PhononLattice3D(
-    unit_cell=sc, N_x=NX, N_y=NY, N_z=NZ,
-    c_matrix=get_c_matrix_coulomb_interaction(g=-K),
-)
-lat_zb = PhononLattice3D(
-    unit_cell=zb, N_x=NX, N_y=NY, N_z=NZ,
-    c_matrix=get_c_matrix_coulomb_interaction(g=-K),
+EPSILON_0 = 8.854e-12 * UNIT_CAPACITANCE_F / UNIT_LENGTH_M
+K_COULOMB = 1 / 4 / np.pi / EPSILON_0
+lat_CdS = PhononLattice3D(
+    unit_cell=uc_CdS,
+    N_x=NX, N_y=NY, N_z=NZ,
+    c_matrix=get_c_matrix_coulomb_interaction2(K_COULOMB)
 )
 
-# Check D matrix
-# dmat = lat._get_matrix_rep_d(q=BlochVector(q=[1, 0], N=[NX, NY]))
-# print(dmat)
 
 # Plot eigenvalues vs. q
-lattice_plots = []
-# for lat in [lat_fcc, lat_bcc, lat_sc, lat_zb]:
-for lat in [lat_fcc, lat_zb]:
-    xdat = []
-    ydats = [[] for v in range(lat.num_modes)]
-    labs = [
-        'omega_{q, ' + '{}'.format(v) + '}^2' for v in range(lat.num_modes)]
-    for q in sorted(lat.operator_q_vectors()):
-        if q[0] == 0:
-            continue
-        if q[1] != 0 or q[2] != 0:
-            continue
-        print(q)
-        xdat.append(q[0])
-        for v in range(lat.num_modes):
-            ydats[v].append(lat.omega2(q, v))
-    plots0 = [(xdat, ydat, lab) for ydat, lab in zip(ydats, labs)]
-    lattice_plots.append(plots0)
+lat = lat_CdS
+xdat = []
+ydats = [[] for v in range(lat.num_modes)]
+labs = [
+    '$\omega_{q, ' + '{}'.format(v) + '}^2$' for v in range(lat.num_modes)]
+for q in sorted(lat.operator_q_vectors()):
+    if q[0] == 0:
+        continue
+    if q[1] != 0 or q[2] != 0:
+        continue
+    print(q)
+    xdat.append(q[0])
+    for v in range(lat.num_modes):
+        ydats[v].append(lat.omega2(q, v))
 
-# fig, ax = plt.subplots(1, 4)
-fig, ax = plt.subplots(1, 2)
-for plots0, ax0 in zip(lattice_plots, ax):
-    for xdat, ydat, lab in plots0:
-        ax0.plot(xdat, ydat, '-', label=lab)
-    ax0.set_xlabel('Bloch wavevector, q[0]')
-    ax0.set_ylabel('Eigenfrequency, omega_{q,v}^2')
+plots0 = [(xdat, ydat, lab) for ydat, lab in zip(ydats, labs)]
+
+plt.rc('text', usetex=True)
+plt.rc('font', family='serif')
+
+fig, ax0 = plt.subplots(1, 1)
+for xdat, ydat, lab in plots0:
+    ax0.plot(xdat, ydat, '-', label=lab)
+
+ax0.set_xlabel('Bloch wavevector along $x$, $q_x$')
+ax0.set_ylabel('Eigenfrequency, $\omega_{q,v}^2$')
 plt.show()
