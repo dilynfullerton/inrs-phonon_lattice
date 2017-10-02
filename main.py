@@ -22,14 +22,21 @@ UNIT_PERMITIVITY_EPSILON_0 = 1e12
 MASS_Cd = 112.414 * UNIT_MASS_AMU
 MASS_S = 32.06 * UNIT_MASS_AMU
 DENSITY_CdS = 4.826 * UNIT_DENSITY_G_CM3
+# uc_CdS = zincblende3d(
+#     a=DENSITY_CdS,
+#     a_is_density=True,
+#     mass1=MASS_Cd,
+#     charge1=+2*UNIT_CHARGE_E,
+#     mass2=MASS_S,
+#     charge2=-2*UNIT_CHARGE_E,
+#     phi=0, psi=0, theta=0,
+# )
 uc_CdS = zincblende3d(
-    a=DENSITY_CdS,
-    a_is_density=True,
-    mass1=MASS_Cd,
-    charge1=+2*UNIT_CHARGE_E,
-    mass2=MASS_S,
-    charge2=-2*UNIT_CHARGE_E,
-    phi=0, psi=0, theta=0,
+    a=1,
+    mass1=1,
+    mass2=10,
+    charge1=1,
+    charge2=-1,
 )
 
 NX = 40  # Number of particles along line
@@ -41,7 +48,8 @@ K_COULOMB = 1 / 4 / np.pi / EPSILON_0
 lat_CdS = PhononLattice3D(
     unit_cell=uc_CdS,
     N_x=NX, N_y=NY, N_z=NZ,
-    c_matrix=get_c_matrix_coulomb_interaction(K_COULOMB)
+    # c_matrix=get_c_matrix_coulomb_interaction(K_COULOMB),
+    c_matrix=get_c_matrix_coulomb_interaction(1),
 )
 
 
