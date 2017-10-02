@@ -48,7 +48,8 @@ class PeriodicPosition:
         if isinstance(other, PeriodicPosition):
             return PeriodicPosition(self.p + other.p, self.N)
         else:
-            return PeriodicPosition(self.p + other, self.N)
+            other = PeriodicPosition(other, self.N)
+            return self + other
 
     def __radd__(self, other):
         return self + other
@@ -65,22 +66,26 @@ class PeriodicPosition:
     def __rmul__(self, other):
         return self * other
 
+    def __iter__(self):
+        return iter(self.p)
+
     def __len__(self):
         return len(self.p)
-
-    def __abs__(self):
-        return np.linalg.norm(self.canonical_displacement(), ord=2)
 
     def __str__(self):
         return str(self.canonical_position())
 
     def __lt__(self, other):
         if not isinstance(other, PeriodicPosition):
-            return False
+            other = PeriodicPosition(other, self.N)
+            return self < other
         else:
             c_self = self._canonical_form_eq()
             c_other = other._canonical_form_eq()
             return c_self < c_other
+
+    def __le__(self, other):
+        return self < other or self == other
 
     def _canonical_form_eq(self):
         """Canonical form for equality comparison
